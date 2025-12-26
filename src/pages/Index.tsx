@@ -1,12 +1,12 @@
 import { useState, useCallback } from "react";
-import { ArrowRight, Zap, Shield, Clock, Code2 } from "lucide-react";
+import { ArrowRight, Zap, GitBranch, BookOpen, Code2, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlatformCard } from "@/components/PlatformCard";
 import { TransferFlow } from "@/components/TransferFlow";
 import { StepIndicator } from "@/components/StepIndicator";
 import { HeroBackground } from "@/components/HeroBackground";
 import { ProjectUrlInput, type ProjectInfo } from "@/components/ProjectUrlInput";
-import { TransferWizard } from "@/components/TransferWizard";
+import { MigrationGuide } from "@/components/MigrationGuide";
 import { useToast } from "@/hooks/use-toast";
 
 const platforms = [
@@ -21,17 +21,17 @@ const platforms = [
 ];
 
 const steps = [
-  { id: 1, title: "Select Source", description: "Choose where your project is" },
-  { id: 2, title: "Enter URL", description: "Paste your project link" },
-  { id: 3, title: "Select Destination", description: "Choose where to transfer" },
-  { id: 4, title: "Transfer", description: "Migrate your project" },
+  { id: 1, title: "GitHub URL", description: "Paste your repo link" },
+  { id: 2, title: "Source Platform", description: "Where it's from" },
+  { id: 3, title: "Destination", description: "Where to migrate" },
+  { id: 4, title: "Analyze", description: "View migration guide" },
 ];
 
 const features = [
-  { icon: Zap, title: "Instant Transfer", description: "Move your projects in seconds with our optimized pipeline" },
-  { icon: Shield, title: "Secure Migration", description: "Your code stays private and encrypted during transfer" },
-  { icon: Clock, title: "Version History", description: "Keep your git history and project timeline intact" },
-  { icon: Code2, title: "Full Compatibility", description: "Support for all major vibe coding platforms" },
+  { icon: GitBranch, title: "GitHub-First", description: "Works with any GitHub-connected project across platforms" },
+  { icon: BookOpen, title: "Compatibility Analysis", description: "See exactly what needs to change before you migrate" },
+  { icon: Zap, title: "Step-by-Step Guide", description: "Clear instructions and commands for each migration step" },
+  { icon: Code2, title: "Platform Insights", description: "Understand config differences between AI coding tools" },
 ];
 
 const Index = () => {
@@ -40,28 +40,20 @@ const Index = () => {
   const [projectUrl, setProjectUrl] = useState("");
   const [isProjectValid, setIsProjectValid] = useState(false);
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-  const [showWizard, setShowWizard] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const { toast } = useToast();
 
-  const currentStep = !source ? 1 : !isProjectValid ? 2 : !destination ? 3 : 4;
+  const currentStep = !isProjectValid ? 1 : !source ? 2 : !destination ? 3 : 4;
 
   const handleValidationChange = useCallback((isValid: boolean, info?: ProjectInfo) => {
     setIsProjectValid(isValid);
     setProjectInfo(info || null);
   }, []);
 
-  const handleTransfer = () => {
+  const handleAnalyze = () => {
     if (source && destination && isProjectValid) {
-      setShowWizard(true);
+      setShowGuide(true);
     }
-  };
-
-  const handleTransferComplete = () => {
-    toast({
-      title: "Transfer Complete!",
-      description: `Your project has been successfully transferred to ${destination?.name}.`,
-    });
-    setShowWizard(false);
   };
 
   const resetSelection = () => {
@@ -70,7 +62,7 @@ const Index = () => {
     setProjectUrl("");
     setIsProjectValid(false);
     setProjectInfo(null);
-    setShowWizard(false);
+    setShowGuide(false);
   };
 
   return (
@@ -87,6 +79,7 @@ const Index = () => {
             <span className="font-heading font-bold text-xl">VibeShift</span>
           </div>
           <Button variant="glass" size="sm">
+            <Github className="w-4 h-4 mr-2" />
             Documentation
           </Button>
         </nav>
@@ -96,11 +89,11 @@ const Index = () => {
       <main className="relative z-10 container mx-auto px-4 py-12 md:py-20">
         <div className="text-center max-w-4xl mx-auto mb-16 animate-slide-up">
           <h1 className="font-heading text-4xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
-            Transfer Your <span className="gradient-text">Vibe Coding</span> Projects
+            Migrate Your <span className="gradient-text">Vibe Coding</span> Projects
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-            Seamlessly migrate your AI-built projects between platforms. 
-            From Lovable to Bolt, Cursor to Replit — switch without losing a single line.
+            Analyze compatibility and get step-by-step migration guides for moving 
+            GitHub-connected projects between AI coding platforms.
           </p>
         </div>
 
@@ -114,29 +107,48 @@ const Index = () => {
           <TransferFlow source={source} destination={destination} />
         </div>
 
-        {/* Transfer Wizard Modal */}
-        {showWizard && source && destination && (
+        {/* Migration Guide Modal */}
+        {showGuide && source && destination && (
           <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <TransferWizard
+            <MigrationGuide
               source={source}
               destination={destination}
               projectInfo={projectInfo}
               projectUrl={projectUrl}
-              onComplete={handleTransferComplete}
-              onCancel={resetSelection}
+              onClose={resetSelection}
             />
           </div>
         )}
 
-        {/* Platform Selection */}
+        {/* Main Content */}
         <div className="max-w-5xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-          <div className="grid md:grid-cols-2 gap-8">
+          {/* GitHub URL Input - First Step */}
+          <div className="glass p-6 rounded-2xl mb-8">
+            <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">1</span>
+              Enter GitHub Repository URL
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Paste the GitHub URL of your project. This works with any platform that syncs to GitHub.
+            </p>
+            <ProjectUrlInput
+              value={projectUrl}
+              onChange={setProjectUrl}
+              onValidationChange={handleValidationChange}
+            />
+          </div>
+
+          {/* Platform Selection */}
+          <div className={`grid md:grid-cols-2 gap-8 ${!isProjectValid ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Source Selection */}
             <div>
               <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">1</span>
-                Select Source Platform
+                <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">2</span>
+                Original Platform
               </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Which platform was this project built on?
+              </p>
               <div className="grid gap-3">
                 {platforms.map((platform) => (
                   <PlatformCard
@@ -153,30 +165,17 @@ const Index = () => {
                   />
                 ))}
               </div>
-
-              {/* Project URL Input - shown after source selection */}
-              {source && (
-                <div className="mt-6 animate-fade-in">
-                  <h3 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">2</span>
-                    Enter Project URL
-                  </h3>
-                  <ProjectUrlInput
-                    value={projectUrl}
-                    onChange={setProjectUrl}
-                    onValidationChange={handleValidationChange}
-                    platformId={source.id}
-                  />
-                </div>
-              )}
             </div>
 
             {/* Destination Selection */}
-            <div className={!source || !isProjectValid ? 'opacity-50 pointer-events-none' : ''}>
+            <div className={!source ? 'opacity-50 pointer-events-none' : ''}>
               <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">3</span>
-                Select Destination Platform
+                Destination Platform
               </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Where do you want to migrate this project?
+              </p>
               <div className="grid gap-3">
                 {platforms.map((platform) => (
                   <PlatformCard
@@ -197,12 +196,12 @@ const Index = () => {
           <Button
             variant="glow"
             size="xl"
-            onClick={handleTransfer}
+            onClick={handleAnalyze}
             disabled={!source || !destination || !isProjectValid}
             className="min-w-[200px]"
           >
-            Start Transfer
-            <ArrowRight className="w-5 h-5" />
+            <BookOpen className="w-5 h-5 mr-2" />
+            Analyze Compatibility
           </Button>
           {(source || destination || projectUrl) && (
             <Button variant="ghost" size="lg" onClick={resetSelection}>
@@ -214,7 +213,7 @@ const Index = () => {
         {/* Features Grid */}
         <section className="max-w-5xl mx-auto animate-fade-in" style={{ animationDelay: '0.6s' }}>
           <h2 className="font-heading text-2xl md:text-3xl font-bold text-center mb-12">
-            Why Choose <span className="gradient-text">VibeShift</span>
+            How <span className="gradient-text">VibeShift</span> Helps
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (

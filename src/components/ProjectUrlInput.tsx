@@ -7,7 +7,6 @@ interface ProjectUrlInputProps {
   value: string;
   onChange: (value: string) => void;
   onValidationChange: (isValid: boolean, projectInfo?: ProjectInfo) => void;
-  platformId: string | null;
 }
 
 export interface ProjectInfo {
@@ -15,41 +14,17 @@ export interface ProjectInfo {
   owner: string;
   files: number;
   lastUpdated: string;
+  isGitHub: boolean;
 }
 
 type ValidationStatus = "idle" | "validating" | "valid" | "invalid";
 
-const platformUrlPatterns: Record<string, RegExp> = {
-  lovable: /^https?:\/\/(www\.)?lovable\.dev\/projects\/[\w-]+$/,
-  bolt: /^https?:\/\/(www\.)?bolt\.new\/[\w-]+\/[\w-]+$/,
-  "google-ai": /^https?:\/\/(www\.)?(aistudio\.google\.com|studio\.ai\.google)\/[\w/-]+$/,
-  base44: /^https?:\/\/(www\.)?base44\.app\/projects\/[\w-]+$/,
-  cursor: /^https?:\/\/(www\.)?cursor\.sh\/[\w-]+$/,
-  replit: /^https?:\/\/(www\.)?replit\.com\/@[\w-]+\/[\w-]+$/,
-  v0: /^https?:\/\/(www\.)?v0\.dev\/[\w-]+$/,
-  windsurf: /^https?:\/\/(www\.)?windsurf\.dev\/projects\/[\w-]+$/,
-  github: /^https?:\/\/(www\.)?github\.com\/[\w-]+\/[\w-]+$/,
-};
-
-const getPlaceholder = (platformId: string | null): string => {
-  const placeholders: Record<string, string> = {
-    lovable: "https://lovable.dev/projects/your-project",
-    bolt: "https://bolt.new/username/project-name",
-    "google-ai": "https://aistudio.google.com/app/prompts/...",
-    base44: "https://base44.app/projects/your-project",
-    cursor: "https://cursor.sh/your-project",
-    replit: "https://replit.com/@username/project-name",
-    v0: "https://v0.dev/your-project",
-    windsurf: "https://windsurf.dev/projects/your-project",
-  };
-  return placeholders[platformId || ""] || "Enter your project URL or GitHub repository URL";
-};
+const githubUrlPattern = /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/;
 
 export const ProjectUrlInput = ({ 
   value, 
   onChange, 
-  onValidationChange, 
-  platformId 
+  onValidationChange
 }: ProjectUrlInputProps) => {
   const [status, setStatus] = useState<ValidationStatus>("idle");
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
@@ -69,22 +44,18 @@ export const ProjectUrlInput = ({
       setError("");
       
       // Simulate validation delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      // Check if URL matches GitHub or platform pattern
-      const isGitHubUrl = platformUrlPatterns.github.test(value);
-      const isPlatformUrl = platformId && platformUrlPatterns[platformId]?.test(value);
-      
-      // More lenient validation - accept any valid URL-like structure
-      const isValidUrl = /^https?:\/\/[\w.-]+\.[a-z]{2,}(\/[\w./-]*)*$/i.test(value);
+      const isGitHubUrl = githubUrlPattern.test(value.trim());
 
-      if (isGitHubUrl || isPlatformUrl || isValidUrl) {
-        // Simulate fetching project info
+      if (isGitHubUrl) {
+        // Simulate fetching project info from GitHub
         const mockProjectInfo: ProjectInfo = {
           name: extractProjectName(value),
           owner: extractOwner(value),
           files: Math.floor(Math.random() * 100) + 20,
           lastUpdated: "2 days ago",
+          isGitHub: true,
         };
         
         setProjectInfo(mockProjectInfo);
@@ -92,14 +63,14 @@ export const ProjectUrlInput = ({
         onValidationChange(true, mockProjectInfo);
       } else {
         setStatus("invalid");
-        setError("Please enter a valid project URL");
+        setError("Please enter a valid GitHub repository URL (e.g., https://github.com/user/repo)");
         onValidationChange(false);
       }
     };
 
     const debounceTimer = setTimeout(validateUrl, 500);
     return () => clearTimeout(debounceTimer);
-  }, [value, platformId, onValidationChange]);
+  }, [value, onValidationChange]);
 
   return (
     <div className="space-y-3">
@@ -109,7 +80,7 @@ export const ProjectUrlInput = ({
           type="url"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={getPlaceholder(platformId)}
+          placeholder="https://github.com/username/repository"
           className={cn(
             "pl-12 pr-12 h-14 glass border-border bg-secondary/50 text-base",
             "placeholder:text-muted-foreground focus-visible:ring-primary",
@@ -142,9 +113,16 @@ export const ProjectUrlInput = ({
       {status === "valid" && projectInfo && (
         <div className="glass p-4 rounded-xl border border-primary/20 animate-fade-in">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="font-heading font-semibold text-foreground">{projectInfo.name}</p>
-              <p className="text-sm text-muted-foreground">by {projectInfo.owner}</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="font-heading font-semibold text-foreground">{projectInfo.name}</p>
+                <p className="text-sm text-muted-foreground">by {projectInfo.owner}</p>
+              </div>
             </div>
             <div className="text-right text-sm text-muted-foreground">
               <p>{projectInfo.files} files</p>
