@@ -44,7 +44,7 @@ export const StepIndicator = ({ steps, currentStep }: StepIndicatorProps) => {
           {index < steps.length - 1 && (
             <div
               className={cn(
-                "w-12 md:w-20 h-0.5 mx-2 transition-colors duration-300",
+                "w-8 md:w-16 h-0.5 mx-1 md:mx-2 transition-colors duration-300",
                 currentStep > step.id ? "bg-primary" : "bg-muted"
               )}
             />
