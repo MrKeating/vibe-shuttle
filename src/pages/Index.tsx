@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ArrowRight, Zap, Shield, Clock, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlatformCard } from "@/components/PlatformCard";
 import { TransferFlow } from "@/components/TransferFlow";
 import { StepIndicator } from "@/components/StepIndicator";
 import { HeroBackground } from "@/components/HeroBackground";
+import { ProjectUrlInput, type ProjectInfo } from "@/components/ProjectUrlInput";
+import { TransferWizard } from "@/components/TransferWizard";
 import { useToast } from "@/hooks/use-toast";
 
 const platforms = [
@@ -20,8 +22,9 @@ const platforms = [
 
 const steps = [
   { id: 1, title: "Select Source", description: "Choose where your project is" },
-  { id: 2, title: "Select Destination", description: "Choose where to transfer" },
-  { id: 3, title: "Transfer", description: "Migrate your project" },
+  { id: 2, title: "Enter URL", description: "Paste your project link" },
+  { id: 3, title: "Select Destination", description: "Choose where to transfer" },
+  { id: 4, title: "Transfer", description: "Migrate your project" },
 ];
 
 const features = [
@@ -34,22 +37,40 @@ const features = [
 const Index = () => {
   const [source, setSource] = useState<typeof platforms[0] | null>(null);
   const [destination, setDestination] = useState<typeof platforms[0] | null>(null);
+  const [projectUrl, setProjectUrl] = useState("");
+  const [isProjectValid, setIsProjectValid] = useState(false);
+  const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
   const { toast } = useToast();
 
-  const currentStep = !source ? 1 : !destination ? 2 : 3;
+  const currentStep = !source ? 1 : !isProjectValid ? 2 : !destination ? 3 : 4;
+
+  const handleValidationChange = useCallback((isValid: boolean, info?: ProjectInfo) => {
+    setIsProjectValid(isValid);
+    setProjectInfo(info || null);
+  }, []);
 
   const handleTransfer = () => {
-    if (source && destination) {
-      toast({
-        title: "Transfer Initiated",
-        description: `Preparing to transfer from ${source.name} to ${destination.name}...`,
-      });
+    if (source && destination && isProjectValid) {
+      setShowWizard(true);
     }
+  };
+
+  const handleTransferComplete = () => {
+    toast({
+      title: "Transfer Complete!",
+      description: `Your project has been successfully transferred to ${destination?.name}.`,
+    });
+    setShowWizard(false);
   };
 
   const resetSelection = () => {
     setSource(null);
     setDestination(null);
+    setProjectUrl("");
+    setIsProjectValid(false);
+    setProjectInfo(null);
+    setShowWizard(false);
   };
 
   return (
@@ -93,6 +114,20 @@ const Index = () => {
           <TransferFlow source={source} destination={destination} />
         </div>
 
+        {/* Transfer Wizard Modal */}
+        {showWizard && source && destination && (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <TransferWizard
+              source={source}
+              destination={destination}
+              projectInfo={projectInfo}
+              projectUrl={projectUrl}
+              onComplete={handleTransferComplete}
+              onCancel={resetSelection}
+            />
+          </div>
+        )}
+
         {/* Platform Selection */}
         <div className="max-w-5xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0.4s' }}>
           <div className="grid md:grid-cols-2 gap-8">
@@ -118,12 +153,28 @@ const Index = () => {
                   />
                 ))}
               </div>
+
+              {/* Project URL Input - shown after source selection */}
+              {source && (
+                <div className="mt-6 animate-fade-in">
+                  <h3 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">2</span>
+                    Enter Project URL
+                  </h3>
+                  <ProjectUrlInput
+                    value={projectUrl}
+                    onChange={setProjectUrl}
+                    onValidationChange={handleValidationChange}
+                    platformId={source.id}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Destination Selection */}
-            <div>
+            <div className={!source || !isProjectValid ? 'opacity-50 pointer-events-none' : ''}>
               <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">2</span>
+                <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">3</span>
                 Select Destination Platform
               </h2>
               <div className="grid gap-3">
@@ -147,13 +198,13 @@ const Index = () => {
             variant="glow"
             size="xl"
             onClick={handleTransfer}
-            disabled={!source || !destination}
+            disabled={!source || !destination || !isProjectValid}
             className="min-w-[200px]"
           >
             Start Transfer
             <ArrowRight className="w-5 h-5" />
           </Button>
-          {(source || destination) && (
+          {(source || destination || projectUrl) && (
             <Button variant="ghost" size="lg" onClick={resetSelection}>
               Reset Selection
             </Button>
