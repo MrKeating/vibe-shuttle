@@ -97,6 +97,15 @@ const platformStrengths: Record<string, { tagline: string; strengths: PlatformSt
     ],
     bestFor: "Visual app building with minimal coding",
   },
+  huggingface: {
+    tagline: "Open-source AI/ML platform",
+    strengths: [
+      { strength: "In-browser AI with transformers.js", icon: Sparkles },
+      { strength: "Thousands of pre-trained models", icon: Code2 },
+      { strength: "No API key for many models", icon: Zap },
+    ],
+    bestFor: "In-browser ML inference and custom AI features",
+  },
 };
 
 interface PlatformStrengthsProps {

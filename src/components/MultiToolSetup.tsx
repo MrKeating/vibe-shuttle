@@ -122,6 +122,12 @@ const getSetupSteps = (platformId: string): SetupStep[] => {
       { title: "Import project", description: "Use Base44's import feature to connect your GitHub repo" },
       { title: "Configure database", description: "Set up any required database connections" },
     ],
+    huggingface: [
+      { title: "Clone repository", description: "Clone the repo locally using git", command: "git clone <your-repo-url>" },
+      { title: "Install dependencies", description: "Run npm install to set up the project", command: "npm install" },
+      { title: "Add Hugging Face token", description: "Get your access token from Hugging Face settings", link: "https://huggingface.co/settings/tokens", linkText: "Get Token" },
+      { title: "Use transformers.js", description: "Import @huggingface/transformers for in-browser AI models" },
+    ],
   };
   
   return steps[platformId] || [];

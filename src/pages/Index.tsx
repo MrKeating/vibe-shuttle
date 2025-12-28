@@ -17,6 +17,7 @@ const platforms = [
   { id: "replit", name: "Replit", icon: "🔶", color: "#F26207" },
   { id: "v0", name: "v0.dev", icon: "◆", color: "#ffffff" },
   { id: "windsurf", name: "Windsurf", icon: "🌊", color: "#06B6D4" },
+  { id: "huggingface", name: "Hugging Face", icon: "🤗", color: "#FFD21E" },
 ];
 
 const steps = [
