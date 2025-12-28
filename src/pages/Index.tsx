@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import { Layers, Zap, GitBranch, Github, CheckCircle2 } from "lucide-react";
+import { Layers, Zap, GitBranch, Github, CheckCircle2, LogIn } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PlatformCard } from "@/components/PlatformCard";
 import { StepIndicator } from "@/components/StepIndicator";
@@ -7,6 +8,7 @@ import { HeroBackground } from "@/components/HeroBackground";
 import { ProjectUrlInput, type ProjectInfo } from "@/components/ProjectUrlInput";
 import { PlatformStrengths } from "@/components/PlatformStrengths";
 import { MultiToolSetup } from "@/components/MultiToolSetup";
+import { useAuth } from "@/contexts/AuthContext";
 
 const platforms = [
   { id: "lovable", name: "Lovable", icon: "💜", color: "#9b87f5" },
@@ -34,6 +36,8 @@ const features = [
 ];
 
 const Index = () => {
+  const { isAuthenticated, login } = useAuth();
+  const navigate = useNavigate();
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [projectUrl, setProjectUrl] = useState("");
   const [isProjectValid, setIsProjectValid] = useState(false);
@@ -82,10 +86,19 @@ const Index = () => {
             </div>
             <span className="font-heading font-bold text-xl">VibeBridge</span>
           </div>
-          <Button variant="glass" size="sm">
-            <Github className="w-4 h-4 mr-2" />
-            Documentation
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAuthenticated ? (
+              <Button variant="glow" size="sm" onClick={() => navigate("/dashboard")}>
+                <Layers className="w-4 h-4 mr-2" />
+                Dashboard
+              </Button>
+            ) : (
+              <Button variant="glow" size="sm" onClick={login}>
+                <Github className="w-4 h-4 mr-2" />
+                Sign in with GitHub
+              </Button>
+            )}
+          </div>
         </nav>
       </header>
 
