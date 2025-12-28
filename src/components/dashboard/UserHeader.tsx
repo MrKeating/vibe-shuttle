@@ -1,0 +1,50 @@
+import { LogOut, Crown, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "react-router-dom";
+
+export const UserHeader = () => {
+  const { user, logout } = useAuth();
+
+  if (!user) return null;
+
+  return (
+    <header className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+      <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+            <Layers className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="font-heading font-bold text-xl">VibeBridge</span>
+        </Link>
+
+        <div className="flex items-center gap-4">
+          {user.is_paid ? (
+            <Badge variant="secondary" className="gap-1 bg-yellow-500/20 text-yellow-500">
+              <Crown className="w-3 h-3" />
+              Pro
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1">
+              Free Plan
+            </Badge>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={user.avatar_url} alt={user.github_username} />
+              <AvatarFallback>{user.github_username.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <span className="text-sm font-medium hidden sm:block">{user.github_username}</span>
+          </div>
+
+          <Button variant="ghost" size="icon" onClick={logout}>
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+};
