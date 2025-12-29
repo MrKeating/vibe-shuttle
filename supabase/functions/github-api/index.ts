@@ -322,30 +322,10 @@ async function pushFiles(
     branch = repoInfo.default_branch || "main";
   }
 
-  // Create blobs for each file first
-  const treeItems = await Promise.all(
-    files.map(async (file) => {
-      const blob = await githubFetch(token, `/repos/${owner}/${repo}/git/blobs`, {
-        method: "POST",
-        body: JSON.stringify({
-          content: file.content,
-          encoding: "utf-8",
-        }),
-      });
-      return {
-        path: file.path,
-        mode: "100644" as const,
-        type: "blob" as const,
-        sha: blob.sha,
-      };
-    })
-  );
-
-  console.log("Blobs created:", treeItems.length);
-
   // Check if repo has any commits (newly created repos might be empty)
   let latestCommitSha: string | null = null;
   let baseTreeSha: string | null = null;
+  let isEmptyRepo = false;
 
   try {
     const refData = await githubFetch(token, `/repos/${owner}/${repo}/git/ref/heads/${branch}`);
@@ -355,7 +335,41 @@ async function pushFiles(
     baseTreeSha = commitData.tree.sha;
     console.log("Existing commit found:", { latestCommitSha, baseTreeSha });
   } catch (error: any) {
-    console.log("No existing commits found, creating initial commit:", error.message);
+    console.log("No existing commits found, will create initial commit:", error.message);
+    isEmptyRepo = true;
+  }
+
+  let treeItems: any[];
+
+  if (isEmptyRepo) {
+    // For empty repos, use inline content in tree (no blobs API needed)
+    treeItems = files.map((file) => ({
+      path: file.path,
+      mode: "100644",
+      type: "blob",
+      content: file.content,
+    }));
+    console.log("Using inline content for empty repo, files:", treeItems.length);
+  } else {
+    // For existing repos, create blobs first
+    treeItems = await Promise.all(
+      files.map(async (file) => {
+        const blob = await githubFetch(token, `/repos/${owner}/${repo}/git/blobs`, {
+          method: "POST",
+          body: JSON.stringify({
+            content: file.content,
+            encoding: "utf-8",
+          }),
+        });
+        return {
+          path: file.path,
+          mode: "100644",
+          type: "blob",
+          sha: blob.sha,
+        };
+      })
+    );
+    console.log("Blobs created:", treeItems.length);
   }
 
   // Create a new tree
@@ -375,12 +389,8 @@ async function pushFiles(
   const commitPayload: any = {
     message,
     tree: newTree.sha,
+    parents: latestCommitSha ? [latestCommitSha] : [],
   };
-  if (latestCommitSha) {
-    commitPayload.parents = [latestCommitSha];
-  } else {
-    commitPayload.parents = [];
-  }
 
   const newCommit = await githubFetch(token, `/repos/${owner}/${repo}/git/commits`, {
     method: "POST",
