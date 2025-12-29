@@ -116,29 +116,65 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {
-    console.error("Error:", error);
+    const status = error instanceof GitHubApiError ? error.status : 500;
     const message = error instanceof Error ? error.message : "Unknown error";
+
+    console.error("Error:", { status, message });
+
     return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+      status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
 
+class GitHubApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function githubFetch(token: string, endpoint: string, options: RequestInit = {}) {
-  const response = await fetch(`https://api.github.com${endpoint}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "VibeMerge-App",
-      ...options.headers,
-    },
-  });
+  const tryFetch = async (scheme: "Bearer" | "token") => {
+    const authorization = scheme === "token" ? `token ${token}` : `Bearer ${token}`;
+    return await fetch(`https://api.github.com${endpoint}`, {
+      ...options,
+      headers: {
+        Authorization: authorization,
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "VibeMerge-App",
+        ...options.headers,
+      },
+    });
+  };
+
+  // Fine-grained PATs commonly work with Bearer; classic PATs commonly work with token.
+  let response = await tryFetch("Bearer");
+  if (!response.ok && response.status === 401) {
+    response = await tryFetch("token");
+  }
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || `GitHub API error: ${response.status}`);
+    const raw = await response.text();
+    let message = `GitHub API error: ${response.status}`;
+
+    try {
+      const parsed = JSON.parse(raw);
+      message = parsed?.message || message;
+    } catch {
+      if (raw) message = raw;
+    }
+
+    if (response.status === 401) {
+      throw new GitHubApiError(
+        401,
+        "GitHub token invalid or expired. Please reconnect your GitHub token."
+      );
+    }
+
+    throw new GitHubApiError(response.status, message);
   }
 
   return response.json();

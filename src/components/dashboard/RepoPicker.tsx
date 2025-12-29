@@ -77,7 +77,12 @@ export const RepoPicker = ({ hasToken, onSelectRepo, selectedRepoId }: RepoPicke
   }
 
   if (error) {
-    const isBadCredentials = error.toLowerCase().includes("bad credentials");
+    const normalized = error.toLowerCase();
+    const isBadCredentials =
+      normalized.includes("bad credentials") ||
+      normalized.includes("token invalid") ||
+      normalized.includes("invalid or expired") ||
+      normalized.includes("401");
     return (
       <div className="glass p-6 rounded-xl text-center">
         <AlertCircle className="w-10 h-10 mx-auto mb-3 text-destructive" />
