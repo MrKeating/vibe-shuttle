@@ -77,15 +77,25 @@ export const RepoPicker = ({ hasToken, onSelectRepo, selectedRepoId }: RepoPicke
   }
 
   if (error) {
+    const isBadCredentials = error.toLowerCase().includes("bad credentials");
     return (
       <div className="glass p-6 rounded-xl text-center">
         <AlertCircle className="w-10 h-10 mx-auto mb-3 text-destructive" />
-        <p className="text-sm text-destructive mb-2">{error}</p>
+        <p className="text-sm text-destructive mb-2">
+          {isBadCredentials 
+            ? "Your GitHub token is invalid or expired" 
+            : error}
+        </p>
+        <p className="text-xs text-muted-foreground mb-3">
+          {isBadCredentials 
+            ? "Please click the GitHub icon in the header to reconnect with a new Personal Access Token"
+            : "Please try again or reconnect your GitHub account"}
+        </p>
         <button
           onClick={loadRepos}
           className="text-xs text-primary hover:underline"
         >
-          Try again
+          Retry
         </button>
       </div>
     );
