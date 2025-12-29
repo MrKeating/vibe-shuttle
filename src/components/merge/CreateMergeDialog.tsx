@@ -269,15 +269,17 @@ export const CreateMergeDialog = ({ onMergeComplete }: CreateMergeDialogProps) =
           )}
 
           {step === "preview-diff" && sourceRepo && targetRepo && (
-            <div className="flex flex-col h-[60vh]">
-              <DiffViewer
-                conflicts={conflicts}
-                sourceRepo={sourceRepo}
-                targetRepo={targetRepo}
-                onResolve={handleResolve}
-                onResolveAll={handleResolveAll}
-              />
-              <div className="flex justify-between items-center pt-4 border-t border-border mt-4">
+            <div className="flex flex-col h-full">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <DiffViewer
+                  conflicts={conflicts}
+                  sourceRepo={sourceRepo}
+                  targetRepo={targetRepo}
+                  onResolve={handleResolve}
+                  onResolveAll={handleResolveAll}
+                />
+              </div>
+              <div className="flex-shrink-0 flex justify-between items-center pt-4 border-t border-border mt-4 bg-background">
                 <Button variant="ghost" onClick={() => setStep("select-repos")}>
                   Back
                 </Button>
