@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LogOut, Crown, Layers, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -8,8 +8,14 @@ import { Link } from "react-router-dom";
 import { GitHubPatDialog } from "./GitHubPatDialog";
 
 export const UserHeader = () => {
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, refreshProfile } = useAuth();
   const [patDialogOpen, setPatDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setPatDialogOpen(true);
+    window.addEventListener("vibemerge:open-github", handler);
+    return () => window.removeEventListener("vibemerge:open-github", handler);
+  }, []);
 
   if (!user) return null;
 
@@ -60,7 +66,11 @@ export const UserHeader = () => {
       <GitHubPatDialog
         open={patDialogOpen}
         onOpenChange={setPatDialogOpen}
-        onSuccess={() => setPatDialogOpen(false)}
+        currentPat={profile?.github_pat ?? undefined}
+        onSuccess={() => {
+          setPatDialogOpen(false);
+          void refreshProfile();
+        }}
       />
     </header>
   );

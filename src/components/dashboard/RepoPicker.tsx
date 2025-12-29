@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Github, Lock, Globe, Search, Loader2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGitHub } from "@/hooks/useGitHub";
 import { cn } from "@/lib/utils";
@@ -60,9 +61,16 @@ export const RepoPicker = ({ hasToken, onSelectRepo, selectedRepoId }: RepoPicke
         <p className="text-sm text-muted-foreground mb-2">
           Connect your GitHub account to select repositories
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground mb-4">
           Click the GitHub icon in the header to add your Personal Access Token
         </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.dispatchEvent(new CustomEvent("vibemerge:open-github"))}
+        >
+          Open GitHub Settings
+        </Button>
       </div>
     );
   }
@@ -87,21 +95,27 @@ export const RepoPicker = ({ hasToken, onSelectRepo, selectedRepoId }: RepoPicke
       <div className="glass p-6 rounded-xl text-center">
         <AlertCircle className="w-10 h-10 mx-auto mb-3 text-destructive" />
         <p className="text-sm text-destructive mb-2">
-          {isBadCredentials 
-            ? "Your GitHub token is invalid or expired" 
-            : error}
+          {isBadCredentials ? "Your GitHub token is invalid or expired" : error}
         </p>
-        <p className="text-xs text-muted-foreground mb-3">
-          {isBadCredentials 
-            ? "Please click the GitHub icon in the header to reconnect with a new Personal Access Token"
+        <p className="text-xs text-muted-foreground mb-4">
+          {isBadCredentials
+            ? "Reconnect your GitHub token to continue."
             : "Please try again or reconnect your GitHub account"}
         </p>
-        <button
-          onClick={loadRepos}
-          className="text-xs text-primary hover:underline"
-        >
-          Retry
-        </button>
+        <div className="flex items-center justify-center gap-3">
+          {isBadCredentials && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent("vibemerge:open-github"))}
+            >
+              Reconnect GitHub
+            </Button>
+          )}
+          <button onClick={loadRepos} className="text-xs text-primary hover:underline">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

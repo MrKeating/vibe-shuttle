@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const githubToken = profile.github_pat;
+    const githubToken = profile.github_pat.trim();
     const { action, ...params } = await req.json();
     console.log("Action:", action, "Params:", Object.keys(params));
 
