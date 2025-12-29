@@ -154,6 +154,10 @@ const Merge = () => {
         github_repo_url: result.html_url,
         repo_name: result.name,
         platforms: ["folder-sync"],
+        source_repo_url: sourceRepo.html_url,
+        source_repo_name: sourceRepo.full_name,
+        merge_mode: "folder",
+        folder_prefix: prefix,
       });
 
       toast({
@@ -245,6 +249,9 @@ const Merge = () => {
         github_repo_url: result.html_url,
         repo_name: result.name,
         platforms: ["merged"],
+        source_repo_url: sourceRepo.html_url,
+        source_repo_name: sourceRepo.full_name,
+        merge_mode: "standard",
       });
 
       toast({

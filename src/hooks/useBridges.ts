@@ -11,6 +11,10 @@ export interface Bridge {
   created_at: string;
   updated_at: string;
   config_created_at: string | null;
+  source_repo_url: string | null;
+  source_repo_name: string | null;
+  merge_mode: string | null;
+  folder_prefix: string | null;
 }
 
 export const useBridges = () => {
@@ -46,6 +50,10 @@ export const useBridges = () => {
     github_repo_url: string;
     repo_name: string;
     platforms: string[];
+    source_repo_url?: string;
+    source_repo_name?: string;
+    merge_mode?: string;
+    folder_prefix?: string;
   }) => {
     if (!user) throw new Error("Not authenticated");
 
@@ -57,6 +65,10 @@ export const useBridges = () => {
         repo_name: data.repo_name,
         platforms: data.platforms,
         config_created_at: new Date().toISOString(),
+        source_repo_url: data.source_repo_url || null,
+        source_repo_name: data.source_repo_name || null,
+        merge_mode: data.merge_mode || "standard",
+        folder_prefix: data.folder_prefix || null,
       })
       .select()
       .single();

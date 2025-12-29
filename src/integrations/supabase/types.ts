@@ -18,10 +18,14 @@ export type Database = {
         Row: {
           config_created_at: string | null
           created_at: string
+          folder_prefix: string | null
           github_repo_url: string
           id: string
+          merge_mode: string | null
           platforms: string[]
           repo_name: string
+          source_repo_name: string | null
+          source_repo_url: string | null
           status: string
           updated_at: string
           user_id: string
@@ -29,10 +33,14 @@ export type Database = {
         Insert: {
           config_created_at?: string | null
           created_at?: string
+          folder_prefix?: string | null
           github_repo_url: string
           id?: string
+          merge_mode?: string | null
           platforms?: string[]
           repo_name: string
+          source_repo_name?: string | null
+          source_repo_url?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -40,10 +48,14 @@ export type Database = {
         Update: {
           config_created_at?: string | null
           created_at?: string
+          folder_prefix?: string | null
           github_repo_url?: string
           id?: string
+          merge_mode?: string | null
           platforms?: string[]
           repo_name?: string
+          source_repo_name?: string | null
+          source_repo_url?: string | null
           status?: string
           updated_at?: string
           user_id?: string
