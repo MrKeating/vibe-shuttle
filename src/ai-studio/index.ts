@@ -10,8 +10,7 @@
  */
 
 // Export AI Studio modules here as they are added
-// Example: export * from "./some-module";
-// Example: export { specificFunction } from "./another-module";
+export * from "./utils/greet";
 
-// Placeholder export to ensure the module is valid
+// Version constant for tracking
 export const AI_STUDIO_VERSION = "1.0.0";
