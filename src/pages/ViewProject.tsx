@@ -4,22 +4,25 @@ import {
   ArrowLeft, 
   Send, 
   Loader2, 
-  Terminal, 
   FileCode, 
   MessageSquare,
   ExternalLink,
   ChevronRight,
   ChevronDown,
-  X
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useWebContainer, type ProjectFile } from "@/hooks/useWebContainer";
 import { useAIChat } from "@/hooks/useAIChat";
 import { useMerge } from "@/hooks/useMerge";
+
+interface ProjectFile {
+  path: string;
+  content: string;
+}
 
 const ViewProject = () => {
   const navigate = useNavigate();
@@ -33,23 +36,19 @@ const ViewProject = () => {
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
-  const [showTerminal, setShowTerminal] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(["src"]));
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
   
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   
   const { getRepoTree, getFileContent } = useMerge();
-  const { 
-    isReady: containerReady, 
-    isLoading: containerLoading, 
-    previewUrl, 
-    terminal,
-    loadFiles,
-    updateFile,
-    deleteFile
-  } = useWebContainer();
   const { messages, isLoading: chatLoading, sendMessage, error: chatError } = useAIChat();
+
+  // StackBlitz embed URL for the repo
+  const stackBlitzUrl = repoFullName 
+    ? `https://stackblitz.com/github/${repoFullName}?embed=1&file=src/App.tsx&hideNavigation=1&theme=dark`
+    : null;
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -58,7 +57,7 @@ const ViewProject = () => {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  // Load repo files
+  // Load repo files for AI context
   useEffect(() => {
     const fetchFiles = async () => {
       if (!owner || !repoName || !profile?.github_pat) return;
@@ -68,31 +67,33 @@ const ViewProject = () => {
         const tree = await getRepoTree(owner, repoName);
         const fileItems = tree.filter(f => f.type === "blob");
         
-        // Fetch content for each file (limit to prevent too many requests)
-        const fileContents: ProjectFile[] = [];
-        const filesToFetch = fileItems.slice(0, 50); // Limit files
+        // Fetch content for key files only (to provide AI context)
+        const keyFiles = fileItems.filter(f => 
+          f.path.endsWith('.tsx') || 
+          f.path.endsWith('.ts') || 
+          f.path.endsWith('.css') ||
+          f.path.endsWith('.json') ||
+          f.path === 'package.json'
+        ).slice(0, 30);
         
-        for (const file of filesToFetch) {
+        const fileContents: ProjectFile[] = [];
+        
+        for (const file of keyFiles) {
           try {
             const result = await getFileContent(owner, repoName, file.path);
             if (result.exists && result.content) {
               fileContents.push({ path: file.path, content: result.content });
             }
-          } catch (e) {
-            console.warn(`Failed to fetch ${file.path}`);
+          } catch {
+            // Skip failed files silently
           }
         }
         
         setFiles(fileContents);
-        
-        // Load into WebContainer when ready
-        if (containerReady && fileContents.length > 0) {
-          await loadFiles(fileContents);
-        }
       } catch (e) {
         console.error("Error loading repo:", e);
         toast({
-          title: "Error loading project",
+          title: "Error loading project files",
           description: e instanceof Error ? e.message : "Unknown error",
           variant: "destructive"
         });
@@ -102,14 +103,7 @@ const ViewProject = () => {
     };
     
     fetchFiles();
-  }, [owner, repoName, profile?.github_pat, containerReady]);
-
-  // Load files into container when both are ready
-  useEffect(() => {
-    if (containerReady && files.length > 0 && !isLoadingFiles) {
-      loadFiles(files);
-    }
-  }, [containerReady, files.length, isLoadingFiles]);
+  }, [owner, repoName, profile?.github_pat]);
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -127,32 +121,26 @@ const ViewProject = () => {
     const edits = await sendMessage(input, files);
     
     if (edits && edits.length > 0) {
-      // Apply edits
+      // Update local file state
       for (const edit of edits) {
-        try {
-          if (edit.action === "update" || edit.action === "create") {
-            if (edit.content !== undefined) {
-              await updateFile(edit.path, edit.content);
-              setFiles(prev => {
-                const existing = prev.find(f => f.path === edit.path);
-                if (existing) {
-                  return prev.map(f => f.path === edit.path ? { ...f, content: edit.content! } : f);
-                }
-                return [...prev, { path: edit.path, content: edit.content! }];
-              });
-            }
-          } else if (edit.action === "delete") {
-            await deleteFile(edit.path);
-            setFiles(prev => prev.filter(f => f.path !== edit.path));
+        if (edit.action === "update" || edit.action === "create") {
+          if (edit.content !== undefined) {
+            setFiles(prev => {
+              const existing = prev.find(f => f.path === edit.path);
+              if (existing) {
+                return prev.map(f => f.path === edit.path ? { ...f, content: edit.content! } : f);
+              }
+              return [...prev, { path: edit.path, content: edit.content! }];
+            });
           }
-        } catch (e) {
-          console.error("Failed to apply edit:", edit.path, e);
+        } else if (edit.action === "delete") {
+          setFiles(prev => prev.filter(f => f.path !== edit.path));
         }
       }
       
       toast({
-        title: "Changes applied",
-        description: `Applied ${edits.length} file edit${edits.length > 1 ? "s" : ""}`,
+        title: "AI suggested changes",
+        description: `${edits.length} file edit${edits.length > 1 ? "s" : ""} ready. Copy the code from the chat to apply.`,
       });
     }
   };
@@ -167,6 +155,12 @@ const ViewProject = () => {
       }
       return next;
     });
+  };
+
+  const refreshPreview = () => {
+    if (iframeRef.current && stackBlitzUrl) {
+      iframeRef.current.src = stackBlitzUrl;
+    }
   };
 
   // Build file tree structure
@@ -194,7 +188,6 @@ const ViewProject = () => {
     return Object.entries(node)
       .filter(([key]) => !key.startsWith("__"))
       .sort(([, a], [, b]) => {
-        // Directories first
         if (a.__type === "dir" && b.__type !== "dir") return -1;
         if (a.__type !== "dir" && b.__type === "dir") return 1;
         return 0;
@@ -256,6 +249,10 @@ const ViewProject = () => {
         <div className="flex-1 font-mono text-sm text-muted-foreground truncate">
           {repoFullName || "Project"}
         </div>
+        <Button variant="ghost" size="sm" onClick={refreshPreview}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
         {repoFullName && (
           <Button
             variant="ghost"
@@ -280,65 +277,45 @@ const ViewProject = () => {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
+              ) : files.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No files loaded</p>
               ) : (
                 renderTree(buildFileTree())
               )}
             </div>
           </ScrollArea>
+          
+          {/* Selected file preview */}
+          {selectedFile && selectedFileContent && (
+            <div className="border-t border-border h-48 flex flex-col">
+              <div className="p-2 text-xs font-mono text-muted-foreground truncate border-b border-border">
+                {selectedFile}
+              </div>
+              <ScrollArea className="flex-1">
+                <pre className="p-2 text-xs font-mono whitespace-pre-wrap break-all">
+                  {selectedFileContent.slice(0, 2000)}
+                  {selectedFileContent.length > 2000 && "..."}
+                </pre>
+              </ScrollArea>
+            </div>
+          )}
         </div>
 
-        {/* Preview */}
+        {/* StackBlitz Preview */}
         <div className="flex-1 flex flex-col min-w-0">
-          {containerLoading || isLoadingFiles ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  {isLoadingFiles ? "Loading project files..." : "Starting development server..."}
-                </p>
-              </div>
-            </div>
-          ) : previewUrl ? (
+          {stackBlitzUrl ? (
             <iframe
-              src={previewUrl}
+              ref={iframeRef}
+              src={stackBlitzUrl}
               className="flex-1 w-full border-0"
               title="Project Preview"
+              allow="cross-origin-isolated"
             />
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center text-muted-foreground">
-                <p className="mb-2">Preview will appear here</p>
-                <p className="text-sm">Waiting for dev server to start...</p>
+                <p>No repository specified</p>
               </div>
-            </div>
-          )}
-
-          {/* Terminal Toggle */}
-          {showTerminal && (
-            <div className="h-48 border-t border-border bg-black text-green-400 font-mono text-xs">
-              <div className="flex items-center justify-between px-3 py-1 border-b border-border">
-                <span className="flex items-center gap-2">
-                  <Terminal className="w-3 h-3" />
-                  Terminal
-                </span>
-                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => setShowTerminal(false)}>
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-              <ScrollArea className="h-[calc(100%-28px)] p-2">
-                {terminal.map((line, i) => (
-                  <div key={i} className="whitespace-pre-wrap break-all">{line}</div>
-                ))}
-              </ScrollArea>
-            </div>
-          )}
-          
-          {!showTerminal && (
-            <div className="h-8 border-t border-border flex items-center px-2">
-              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowTerminal(true)}>
-                <Terminal className="w-3 h-3 mr-1" />
-                Terminal
-              </Button>
             </div>
           )}
         </div>
@@ -354,10 +331,10 @@ const ViewProject = () => {
             <div className="p-3 space-y-4">
               {messages.length === 0 && (
                 <div className="text-center text-muted-foreground text-sm py-8">
-                  <p>Ask me to make changes to your project!</p>
-                  <p className="mt-2 text-xs">Examples:</p>
+                  <p>Ask me about your project!</p>
+                  <p className="mt-2 text-xs">I can suggest code changes.</p>
                   <p className="text-xs mt-1">"Add a dark mode toggle"</p>
-                  <p className="text-xs">"Fix the navigation styling"</p>
+                  <p className="text-xs">"Explain the main component"</p>
                 </div>
               )}
               
@@ -367,10 +344,10 @@ const ViewProject = () => {
                   className={`text-sm ${
                     msg.role === "user"
                       ? "bg-primary/10 text-foreground ml-8"
-                      : "bg-muted text-foreground mr-8"
+                      : "bg-muted text-foreground mr-4"
                   } rounded-lg p-3`}
                 >
-                  <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                  <div className="whitespace-pre-wrap break-words text-xs">{msg.content}</div>
                 </div>
               ))}
               
@@ -400,7 +377,7 @@ const ViewProject = () => {
               <Input
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask AI to edit..."
+                placeholder="Ask AI..."
                 disabled={chatLoading}
                 className="flex-1"
               />
