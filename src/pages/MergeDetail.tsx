@@ -1,14 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, GitBranch, FolderTree, Layers, RefreshCw, Calendar, Loader2, Download } from "lucide-react";
+import { ArrowLeft, ExternalLink, GitBranch, FolderTree, Layers, RefreshCw, Calendar, Loader2, Download, FileText, Eye } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { UserHeader } from "@/components/dashboard/UserHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMerge } from "@/hooks/useMerge";
+import { useMerge, FileTreeItem } from "@/hooks/useMerge";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface BridgeDetail {
   id: string;
@@ -25,6 +34,12 @@ interface BridgeDetail {
   folder_prefix: string | null;
 }
 
+interface PreviewFile {
+  path: string;
+  targetPath: string;
+  size?: number;
+}
+
 const MergeDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -32,6 +47,9 @@ const MergeDetail = () => {
   const [bridge, setBridge] = useState<BridgeDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPulling, setIsPulling] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewFiles, setPreviewFiles] = useState<PreviewFile[]>([]);
   const { getRepoTree, getFileContent } = useMerge();
   const { toast } = useToast();
 
@@ -65,32 +83,23 @@ const MergeDetail = () => {
     }
   }, [id, isAuthenticated, navigate]);
 
-  const handlePullLatest = async () => {
-    if (!bridge?.source_repo_url || !bridge?.github_repo_url) {
-      toast({
-        title: "Cannot Pull",
-        description: "Missing source or target repository information.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const getRepoInfo = (url: string) => {
+    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (!match) return null;
+    return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+  };
 
-    setIsPulling(true);
+  const handlePreviewPull = async () => {
+    if (!bridge?.source_repo_url) return;
+
+    setIsLoadingPreview(true);
     try {
-      // Parse source repo
-      const sourceMatch = bridge.source_repo_url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-      if (!sourceMatch) throw new Error("Invalid source repo URL");
-      const [, sourceOwner, sourceRepo] = sourceMatch;
+      const sourceInfo = getRepoInfo(bridge.source_repo_url);
+      if (!sourceInfo) throw new Error("Invalid source repo URL");
 
-      // Parse target repo
-      const targetMatch = bridge.github_repo_url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-      if (!targetMatch) throw new Error("Invalid target repo URL");
-      const [, targetOwner, targetRepo] = targetMatch;
+      const folderPrefix = bridge.folder_prefix || (isFolderMode ? "ai-studio" : "");
 
-      const folderPrefix = bridge.folder_prefix || "ai-studio";
-
-      // Fetch source repo tree
-      const sourceTree = await getRepoTree(sourceOwner, sourceRepo.replace(/\.git$/, ""));
+      const sourceTree = await getRepoTree(sourceInfo.owner, sourceInfo.repo);
       const sourceFiles = sourceTree.filter((f) => f.type === "blob");
 
       if (sourceFiles.length === 0) {
@@ -102,13 +111,44 @@ const MergeDetail = () => {
         return;
       }
 
+      const files: PreviewFile[] = sourceFiles.map((f) => ({
+        path: f.path,
+        targetPath: folderPrefix ? `${folderPrefix}/${f.path}` : f.path,
+        size: f.size,
+      }));
+
+      setPreviewFiles(files);
+      setShowPreview(true);
+    } catch (error: any) {
+      toast({
+        title: "Preview Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleConfirmPull = async () => {
+    if (!bridge?.source_repo_url || !bridge?.github_repo_url) return;
+
+    setShowPreview(false);
+    setIsPulling(true);
+    try {
+      const sourceInfo = getRepoInfo(bridge.source_repo_url);
+      const targetInfo = getRepoInfo(bridge.github_repo_url);
+      if (!sourceInfo || !targetInfo) throw new Error("Invalid repo URLs");
+
+      const folderPrefix = bridge.folder_prefix || (isFolderMode ? "ai-studio" : "");
+
       // Fetch all file contents
       const filesToPush: { path: string; content: string }[] = [];
-      for (const file of sourceFiles) {
-        const result = await getFileContent(sourceOwner, sourceRepo.replace(/\.git$/, ""), file.path);
+      for (const file of previewFiles) {
+        const result = await getFileContent(sourceInfo.owner, sourceInfo.repo, file.path);
         if (result.exists && result.content) {
           filesToPush.push({
-            path: `${folderPrefix}/${file.path}`,
+            path: file.targetPath,
             content: result.content,
           });
         }
@@ -127,10 +167,12 @@ const MergeDetail = () => {
       const { data, error } = await supabase.functions.invoke("github-api", {
         body: {
           action: "push-files",
-          owner: targetOwner,
-          repo: targetRepo.replace(/\.git$/, ""),
+          owner: targetInfo.owner,
+          repo: targetInfo.repo,
           files: filesToPush,
-          message: `Pull latest from ${sourceOwner}/${sourceRepo} into /${folderPrefix}/`,
+          message: folderPrefix 
+            ? `Pull latest from ${sourceInfo.owner}/${sourceInfo.repo} into /${folderPrefix}/`
+            : `Pull latest from ${sourceInfo.owner}/${sourceInfo.repo}`,
         },
       });
 
@@ -147,7 +189,7 @@ const MergeDetail = () => {
 
       toast({
         title: "Pull Complete",
-        description: `Synced ${filesToPush.length} files into /${folderPrefix}/`,
+        description: `Synced ${filesToPush.length} files${folderPrefix ? ` into /${folderPrefix}/` : ""}`,
       });
     } catch (error: any) {
       toast({
@@ -165,7 +207,14 @@ const MergeDetail = () => {
   }
 
   const isFolderMode = bridge?.merge_mode === "folder" || bridge?.platforms?.includes("folder-sync");
-  const canPull = isFolderMode && bridge?.source_repo_url;
+  const canPull = bridge?.source_repo_url;
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -207,7 +256,7 @@ const MergeDetail = () => {
             {/* Repository Cards */}
             <div className="grid md:grid-cols-2 gap-6">
               {/* Source Repository */}
-              {(bridge.source_repo_url || isFolderMode) && (
+              {bridge.source_repo_url && (
                 <div className="glass p-6 rounded-xl border border-border">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
@@ -224,21 +273,15 @@ const MergeDetail = () => {
                       : "Files from this repo were merged into the target."
                     }
                   </p>
-                  {bridge.source_repo_url ? (
-                    <a
-                      href={bridge.source_repo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-                    >
-                      View on GitHub
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic">
-                      Source URL not stored (older merge)
-                    </span>
-                  )}
+                  <a
+                    href={bridge.source_repo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    View on GitHub
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               )}
 
@@ -319,31 +362,80 @@ const MergeDetail = () => {
             </div>
 
             {/* Actions */}
-            {isFolderMode && (
-              <div className="flex gap-3">
-                {canPull && (
-                  <Button 
-                    className="gap-2" 
-                    onClick={handlePullLatest}
-                    disabled={isPulling}
-                  >
-                    {isPulling ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    {isPulling ? "Pulling..." : "Pull Latest"}
-                  </Button>
-                )}
-                <Button variant="outline" className="gap-2" onClick={() => navigate("/merge")}>
-                  <RefreshCw className="w-4 h-4" />
-                  New Merge
+            <div className="flex gap-3">
+              {canPull && (
+                <Button 
+                  className="gap-2" 
+                  onClick={handlePreviewPull}
+                  disabled={isPulling || isLoadingPreview}
+                >
+                  {isLoadingPreview ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                  {isLoadingPreview ? "Loading..." : "Preview & Pull Latest"}
                 </Button>
-              </div>
-            )}
+              )}
+              <Button variant="outline" className="gap-2" onClick={() => navigate("/merge")}>
+                <RefreshCw className="w-4 h-4" />
+                New Merge
+              </Button>
+            </div>
           </div>
         ) : null}
       </main>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              Files to Pull
+            </DialogTitle>
+            <DialogDescription>
+              {previewFiles.length} files will be synced from the source repository
+              {isFolderMode && bridge?.folder_prefix && ` into /${bridge.folder_prefix}/`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[400px] rounded-lg border border-border">
+            <div className="p-4 space-y-1">
+              {previewFiles.map((file, index) => (
+                <div 
+                  key={index} 
+                  className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 text-sm"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate font-mono text-xs">{file.targetPath}</span>
+                  </div>
+                  {file.size && (
+                    <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                      {formatFileSize(file.size)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPreview(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmPull} disabled={isPulling} className="gap-2">
+              {isPulling ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {isPulling ? "Pulling..." : `Pull ${previewFiles.length} Files`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
