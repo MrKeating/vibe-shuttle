@@ -96,28 +96,63 @@ const Merge = () => {
 
     try {
       const [sourceOwner, sourceRepoName] = sourceRepo.full_name.split("/");
+      const [targetOwner, targetRepoName] = targetRepo.full_name.split("/");
 
       const filesToPush: { path: string; content: string }[] = [];
 
+      // Build list of all files we need to include
+      // Start with target repo's files as base, then overlay source changes
+      const targetFilePaths = new Set(
+        conflicts
+          .filter(c => c.status === "deleted" || c.status === "conflict")
+          .map(c => c.path)
+      );
+
+      // For files only in target (marked as "deleted" in our diff), keep them
+      for (const conflict of conflicts) {
+        if (conflict.status === "deleted") {
+          // This file exists only in target - fetch from target and include it
+          const result = await getFileContent(targetOwner, targetRepoName, conflict.path);
+          if (result.content) {
+            filesToPush.push({ path: conflict.path, content: result.content });
+          }
+        }
+      }
+
+      // For files in source (added, modified, or conflict)
       for (const conflict of conflicts) {
         let content: string | null = null;
 
-        if (conflict.resolved && conflict.resolvedContent !== undefined) {
-          content = conflict.resolvedContent;
-        } else if (conflict.status === "added") {
-          const result = await getFileContent(sourceOwner, sourceRepoName, conflict.path);
-          content = result.content || "";
-        } else if (conflict.status === "deleted") {
+        if (conflict.status === "deleted") {
+          // Already handled above
           continue;
-        } else if (conflict.status === "conflict") {
+        }
+
+        if (conflict.resolved && conflict.resolvedContent !== undefined) {
+          // User manually resolved this conflict
+          content = conflict.resolvedContent;
+        } else if (conflict.status === "added" || conflict.status === "conflict") {
+          // For added files or unresolved conflicts, use source version
           const result = await getFileContent(sourceOwner, sourceRepoName, conflict.path);
           content = result.content || "";
         }
 
-        if (content !== null) {
+        if (content !== null && content !== "") {
           filesToPush.push({ path: conflict.path, content });
         }
       }
+
+      if (filesToPush.length === 0) {
+        toast({
+          title: "Nothing to merge",
+          description: "No files found to merge. Both repositories may be empty or identical.",
+          variant: "destructive",
+        });
+        setStep("configure-output");
+        return;
+      }
+
+      console.log("Files to push:", filesToPush.length, filesToPush.map(f => f.path));
 
       const result = await executeMerge(
         sourceRepo,
