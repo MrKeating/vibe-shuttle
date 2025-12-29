@@ -206,6 +206,7 @@ const MergeDetail = () => {
   ) => {
     if (!bridge || !user) return;
 
+    const isOverwrite = bridge.merge_mode === "overwrite";
     try {
       await supabase.from("sync_history").insert({
         bridge_id: bridge.id,
@@ -216,7 +217,7 @@ const MergeDetail = () => {
         files_count: filesCount,
         commit_sha: commitSha,
         commit_message: operation === "pull" 
-          ? `Pull from source into /${bridge.folder_prefix || "ai-studio"}/`
+          ? (isOverwrite ? "Overwrite sync from source" : `Pull from source into /${bridge.folder_prefix || "ai-studio"}/`)
           : `Push from /${bridge.folder_prefix || "ai-studio"}/ to source`,
         status,
         error_message: errorMessage,
@@ -236,7 +237,9 @@ const MergeDetail = () => {
       const sourceInfo = getRepoInfo(bridge.source_repo_url);
       if (!sourceInfo) throw new Error("Invalid source repo URL");
 
-      const folderPrefix = bridge.folder_prefix || (isFolderMode ? "ai-studio" : "");
+      // In overwrite mode, no folder prefix - files go to root
+      const isOverwrite = bridge.merge_mode === "overwrite";
+      const folderPrefix = isOverwrite ? "" : (bridge.folder_prefix || (isFolderMode ? "ai-studio" : ""));
 
       const sourceTree = await getRepoTree(sourceInfo.owner, sourceInfo.repo, selectedSourceBranch);
       const sourceFiles = sourceTree.filter((f) => f.type === "blob");
@@ -323,7 +326,9 @@ const MergeDetail = () => {
       const targetInfo = getRepoInfo(bridge.github_repo_url);
       if (!sourceInfo || !targetInfo) throw new Error("Invalid repo URLs");
 
-      const folderPrefix = bridge.folder_prefix || (isFolderMode ? "ai-studio" : "");
+      // In overwrite mode, no folder prefix - files go to root
+      const isOverwrite = bridge.merge_mode === "overwrite";
+      const folderPrefix = isOverwrite ? "" : (bridge.folder_prefix || (isFolderMode ? "ai-studio" : ""));
 
       // Fetch all file contents
       const filesToPush: { path: string; content: string }[] = [];
@@ -347,6 +352,11 @@ const MergeDetail = () => {
         return;
       }
 
+      // Build commit message
+      const commitMessage = isOverwrite
+        ? `Overwrite sync: ${sourceInfo.owner}/${sourceInfo.repo}:${selectedSourceBranch}`
+        : `git subtree pull: ${sourceInfo.owner}/${sourceInfo.repo}:${selectedSourceBranch} → /${folderPrefix}/`;
+
       // Push to target repo
       const { data, error } = await supabase.functions.invoke("github-api", {
         body: {
@@ -354,7 +364,7 @@ const MergeDetail = () => {
           owner: targetInfo.owner,
           repo: targetInfo.repo,
           files: filesToPush,
-          message: `git subtree pull: ${sourceInfo.owner}/${sourceInfo.repo}:${selectedSourceBranch} → /${folderPrefix}/`,
+          message: commitMessage,
           branch: selectedTargetBranch,
         },
       });
@@ -373,13 +383,15 @@ const MergeDetail = () => {
       await logSyncOperation("pull", filesToPush.length, data?.commit_sha, "success");
 
       toast({
-        title: "Pull Complete",
-        description: `Synced ${filesToPush.length} files into /${folderPrefix}/`,
+        title: isOverwrite ? "Overwrite Complete" : "Pull Complete",
+        description: isOverwrite 
+          ? `Synced ${filesToPush.length} files (overwrite mode)`
+          : `Synced ${filesToPush.length} files into /${folderPrefix}/`,
       });
     } catch (error: any) {
       await logSyncOperation("pull", 0, null, "failed", error.message);
       toast({
-        title: "Pull Failed",
+        title: "Sync Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -438,8 +450,9 @@ const MergeDetail = () => {
   }
 
   const isFolderMode = bridge?.merge_mode === "folder" || bridge?.platforms?.includes("folder-sync");
+  const isOverwriteMode = bridge?.merge_mode === "overwrite";
   const canPull = bridge?.source_repo_url;
-  const canPush = bridge?.source_repo_url && bridge?.folder_prefix;
+  const canPush = bridge?.source_repo_url && bridge?.folder_prefix && !isOverwriteMode;
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return "";
@@ -471,7 +484,9 @@ const MergeDetail = () => {
             {/* Title Section */}
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
-                {isFolderMode ? (
+                {isOverwriteMode ? (
+                  <RefreshCw className="w-7 h-7 text-primary" />
+                ) : isFolderMode ? (
                   <FolderTree className="w-7 h-7 text-primary" />
                 ) : (
                   <Layers className="w-7 h-7 text-primary" />
@@ -480,7 +495,11 @@ const MergeDetail = () => {
               <div>
                 <h1 className="font-heading text-3xl font-bold mb-1">{bridge.repo_name}</h1>
                 <p className="text-muted-foreground">
-                  {isFolderMode ? "Folder Mode Sync (git subtree)" : "Standard Merge"}
+                  {isOverwriteMode 
+                    ? "Overwrite Mode (direct replacement)" 
+                    : isFolderMode 
+                      ? "Folder Mode Sync (git subtree)" 
+                      : "Standard Merge"}
                 </p>
               </div>
             </div>
@@ -548,9 +567,11 @@ const MergeDetail = () => {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {isFolderMode 
-                      ? "Files from this repo are synced into the target's subfolder."
-                      : "Files from this repo were merged into the target."
+                    {isOverwriteMode 
+                      ? "Files from this repo will replace files in the target directly."
+                      : isFolderMode 
+                        ? "Files from this repo are synced into the target's subfolder."
+                        : "Files from this repo were merged into the target."
                     }
                   </p>
                   <a
@@ -573,15 +594,17 @@ const MergeDetail = () => {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                      {isFolderMode ? "Target (Canonical) Repository" : "Merged Repository"}
+                      {isOverwriteMode ? "Target Repository (Lovable)" : isFolderMode ? "Target (Canonical) Repository" : "Merged Repository"}
                     </span>
                     <h3 className="font-semibold">{bridge.repo_name}</h3>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {isFolderMode 
-                    ? `This is your main Lovable repo. Source files live in /${bridge.folder_prefix || "ai-studio"}/`
-                    : "The combined output of both repositories."
+                  {isOverwriteMode 
+                    ? "This Lovable repo will be overwritten with source files."
+                    : isFolderMode 
+                      ? `This is your main Lovable repo. Source files live in /${bridge.folder_prefix || "ai-studio"}/`
+                      : "The combined output of both repositories."
                   }
                 </p>
                 <a
@@ -596,8 +619,22 @@ const MergeDetail = () => {
               </div>
             </div>
 
+            {/* Overwrite Mode Warning */}
+            {isOverwriteMode && (
+              <div className="glass p-6 rounded-xl border border-destructive/50 bg-destructive/5">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-destructive">
+                  <RefreshCw className="w-5 h-5" />
+                  Overwrite Mode Active
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-destructive">Warning:</strong> When you pull, files from the source repository will directly overwrite files in your Lovable repository. 
+                  This is useful when AI Studio generates your entire app, but be careful not to lose local changes.
+                </p>
+              </div>
+            )}
+
             {/* Folder Mode Info */}
-            {isFolderMode && bridge.folder_prefix && (
+            {isFolderMode && bridge.folder_prefix && !isOverwriteMode && (
               <div className="glass p-6 rounded-xl border border-border">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <FolderTree className="w-5 h-5 text-primary" />
@@ -654,11 +691,17 @@ const MergeDetail = () => {
                   New Merge
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                <strong>Pull:</strong> Fetch files from source repo → write to /{bridge?.folder_prefix || "ai-studio"}/ (git subtree pull)
-                <br />
-                <strong>Push:</strong> Export files from /{bridge?.folder_prefix || "ai-studio"}/ → push to source repo (git subtree split)
-              </p>
+              {isOverwriteMode ? (
+                <p className="text-xs text-muted-foreground mt-3">
+                  <strong>Pull:</strong> Fetch files from source repo → overwrite target repo directly (destructive sync)
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-3">
+                  <strong>Pull:</strong> Fetch files from source repo → write to /{bridge?.folder_prefix || "ai-studio"}/ (git subtree pull)
+                  <br />
+                  <strong>Push:</strong> Export files from /{bridge?.folder_prefix || "ai-studio"}/ → push to source repo (git subtree split)
+                </p>
+              )}
             </div>
 
             {/* Sync History */}
