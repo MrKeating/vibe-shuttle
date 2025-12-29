@@ -54,6 +54,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          github_pat: string | null
           github_username: string | null
           id: string
           is_paid: boolean
@@ -63,6 +64,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          github_pat?: string | null
           github_username?: string | null
           id: string
           is_paid?: boolean
@@ -72,6 +74,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          github_pat?: string | null
           github_username?: string | null
           id?: string
           is_paid?: boolean

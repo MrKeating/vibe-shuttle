@@ -1,12 +1,15 @@
-import { LogOut, Crown, Layers } from "lucide-react";
+import { useState } from "react";
+import { LogOut, Crown, Layers, Github, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
+import { GitHubPatDialog } from "./GitHubPatDialog";
 
 export const UserHeader = () => {
   const { user, logout } = useAuth();
+  const [patDialogOpen, setPatDialogOpen] = useState(false);
 
   if (!user) return null;
 
@@ -40,11 +43,21 @@ export const UserHeader = () => {
             <span className="text-sm font-medium hidden sm:block">{user.github_username}</span>
           </div>
 
+          <Button variant="ghost" size="icon" onClick={() => setPatDialogOpen(true)} title="GitHub Settings">
+            <Github className="w-4 h-4" />
+          </Button>
+
           <Button variant="ghost" size="icon" onClick={logout}>
             <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </div>
+
+      <GitHubPatDialog
+        open={patDialogOpen}
+        onOpenChange={setPatDialogOpen}
+        onSuccess={() => setPatDialogOpen(false)}
+      />
     </header>
   );
 };
