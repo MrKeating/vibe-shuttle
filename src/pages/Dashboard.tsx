@@ -5,13 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBridges } from "@/hooks/useBridges";
 import { UserHeader } from "@/components/dashboard/UserHeader";
 import { BridgeCard } from "@/components/dashboard/BridgeCard";
-import { CreateMergeDialog } from "@/components/merge/CreateMergeDialog";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Dashboard = () => {
   const { user, profile, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { bridges, isLoading, createBridge, deleteBridge, canCreateBridge, bridgeLimit } = useBridges();
+  const { bridges, isLoading, deleteBridge, bridgeLimit } = useBridges();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -24,15 +24,6 @@ const Dashboard = () => {
   }
 
   const isPaid = profile?.is_paid || false;
-
-  const handleMergeComplete = async (repo: any) => {
-    // Create a bridge record for the merged repo
-    await createBridge({
-      github_repo_url: repo.html_url,
-      repo_name: repo.name,
-      platforms: ["merged"],
-    });
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -48,7 +39,10 @@ const Dashboard = () => {
               {bridgeLimit !== 1 ? "s" : ""} completed
             </p>
           </div>
-          <CreateMergeDialog onMergeComplete={handleMergeComplete} />
+          <Button variant="glow" className="gap-2" onClick={() => navigate("/merge")}>
+            <GitMerge className="w-4 h-4" />
+            Merge Repos
+          </Button>
         </div>
 
         {/* Upgrade Banner (for free users) */}
@@ -89,7 +83,10 @@ const Dashboard = () => {
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Merge your first two GitHub repositories to combine code from different AI tools.
             </p>
-            <CreateMergeDialog onMergeComplete={handleMergeComplete} />
+            <Button variant="glow" className="gap-2" onClick={() => navigate("/merge")}>
+              <GitMerge className="w-4 h-4" />
+              Merge Repos
+            </Button>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
