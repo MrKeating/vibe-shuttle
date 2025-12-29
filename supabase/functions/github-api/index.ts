@@ -105,6 +105,22 @@ Deno.serve(async (req) => {
       case "push-files":
         result = await pushFiles(githubToken, params.owner, params.repo, params.files, params.message, params.branch);
         break;
+      case "get-branches":
+        result = await getBranches(githubToken, params.owner, params.repo);
+        break;
+      case "push-folder-to-source":
+        result = await pushFolderToSource(
+          githubToken,
+          params.sourceOwner,
+          params.sourceRepo,
+          params.targetOwner,
+          params.targetRepo,
+          params.folderPrefix,
+          params.message,
+          params.sourceBranch,
+          params.targetBranch
+        );
+        break;
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400,
@@ -425,4 +441,78 @@ async function pushFiles(
   });
 
   return { success: true, commit_sha: newCommit.sha, method: "git-data" };
+}
+
+async function getBranches(token: string, owner: string, repo: string) {
+  console.log("getBranches:", { owner, repo });
+  const branches = await githubFetch(token, `/repos/${owner}/${repo}/branches?per_page=100`);
+  return branches.map((b: any) => ({
+    name: b.name,
+    sha: b.commit.sha,
+    protected: b.protected,
+  }));
+}
+
+async function pushFolderToSource(
+  token: string,
+  sourceOwner: string,
+  sourceRepo: string,
+  targetOwner: string,
+  targetRepo: string,
+  folderPrefix: string,
+  message: string,
+  sourceBranch?: string,
+  targetBranch?: string
+) {
+  console.log("pushFolderToSource:", { sourceOwner, sourceRepo, targetOwner, targetRepo, folderPrefix });
+
+  // Get the tree from the target repo (Lovable repo with the folder)
+  const targetRepoInfo = await githubFetch(token, `/repos/${targetOwner}/${targetRepo}`);
+  const tBranch = targetBranch || targetRepoInfo.default_branch || "main";
+
+  const targetTree = await githubFetch(
+    token,
+    `/repos/${targetOwner}/${targetRepo}/git/trees/${tBranch}?recursive=1`
+  );
+
+  // Filter files that are in the folder prefix
+  const prefixWithSlash = folderPrefix.endsWith("/") ? folderPrefix : `${folderPrefix}/`;
+  const folderFiles = targetTree.tree.filter(
+    (item: any) => item.type === "blob" && item.path.startsWith(prefixWithSlash)
+  );
+
+  if (folderFiles.length === 0) {
+    throw new GitHubApiError(400, `No files found in /${folderPrefix}/ folder`);
+  }
+
+  console.log(`Found ${folderFiles.length} files in /${folderPrefix}/`);
+
+  // Fetch content for each file and remove the prefix
+  const filesToPush: { path: string; content: string }[] = [];
+  for (const file of folderFiles) {
+    const content = await getFileContent(token, targetOwner, targetRepo, file.path, tBranch);
+    if (content.exists && content.content) {
+      // Remove the folder prefix from the path
+      const newPath = file.path.slice(prefixWithSlash.length);
+      filesToPush.push({ path: newPath, content: content.content });
+    }
+  }
+
+  if (filesToPush.length === 0) {
+    throw new GitHubApiError(400, "Could not fetch any file contents from the folder");
+  }
+
+  // Push to source repo
+  const sourceRepoInfo = await githubFetch(token, `/repos/${sourceOwner}/${sourceRepo}`);
+  const sBranch = sourceBranch || sourceRepoInfo.default_branch || "main";
+
+  const result = await pushFiles(token, sourceOwner, sourceRepo, filesToPush, message, sBranch);
+
+  return {
+    success: true,
+    files_count: filesToPush.length,
+    commit_sha: result.commit_sha,
+    source_branch: sBranch,
+    target_branch: tBranch,
+  };
 }
