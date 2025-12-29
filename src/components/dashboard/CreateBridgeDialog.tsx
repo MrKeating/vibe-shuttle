@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Layers, Plus, Crown } from "lucide-react";
+import { Layers, Plus, Crown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,9 +9,21 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ProjectUrlInput, type ProjectInfo } from "@/components/ProjectUrlInput";
 import { PlatformCard } from "@/components/PlatformCard";
+import { RepoPicker } from "@/components/dashboard/RepoPicker";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useGitHub } from "@/hooks/useGitHub";
+
+interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  html_url: string;
+  description: string | null;
+  private: boolean;
+  default_branch: string;
+}
 
 const PLATFORMS = [
   { id: "lovable", name: "Lovable", icon: "💜", color: "#9b87f5" },
@@ -36,17 +48,14 @@ interface CreateBridgeDialogProps {
 
 export const CreateBridgeDialog = ({ onCreateBridge, canCreate }: CreateBridgeDialogProps) => {
   const [open, setOpen] = useState(false);
-  const [projectUrl, setProjectUrl] = useState("");
-  const [isProjectValid, setIsProjectValid] = useState(false);
-  const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const { createVibeBridgeConfig } = useGitHub();
 
-  const handleValidationChange = (isValid: boolean, info?: ProjectInfo) => {
-    setIsProjectValid(isValid);
-    setProjectInfo(info || null);
-  };
+  const hasToken = !!profile?.github_pat;
 
   const togglePlatform = (platformId: string) => {
     setSelectedPlatforms((prev) =>
@@ -57,29 +66,41 @@ export const CreateBridgeDialog = ({ onCreateBridge, canCreate }: CreateBridgeDi
   };
 
   const handleCreate = async () => {
-    if (!projectInfo || selectedPlatforms.length === 0) return;
+    if (!selectedRepo || selectedPlatforms.length === 0) return;
 
     setIsCreating(true);
     try {
+      const [owner, repo] = selectedRepo.full_name.split("/");
+      
+      // Create the .vibebridge/config.json in the repo
+      await createVibeBridgeConfig(owner, repo, selectedPlatforms);
+      
+      // Create the bridge record
       await onCreateBridge({
-        github_repo_url: projectUrl,
-        repo_name: projectInfo.name,
+        github_repo_url: selectedRepo.html_url,
+        repo_name: selectedRepo.name,
         platforms: selectedPlatforms,
       });
-      toast({ title: "Bridge created!", description: `${projectInfo.name} is now bridged.` });
+      
+      toast({ 
+        title: "Bridge created!", 
+        description: `${selectedRepo.name} is now bridged with config file created.` 
+      });
       setOpen(false);
       resetForm();
-    } catch (error) {
-      toast({ title: "Failed to create bridge", variant: "destructive" });
+    } catch (error: any) {
+      toast({ 
+        title: "Failed to create bridge", 
+        description: error.message,
+        variant: "destructive" 
+      });
     } finally {
       setIsCreating(false);
     }
   };
 
   const resetForm = () => {
-    setProjectUrl("");
-    setIsProjectValid(false);
-    setProjectInfo(null);
+    setSelectedRepo(null);
     setSelectedPlatforms([]);
   };
 
@@ -127,23 +148,30 @@ export const CreateBridgeDialog = ({ onCreateBridge, canCreate }: CreateBridgeDi
             Create New Bridge
           </DialogTitle>
           <DialogDescription>
-            Connect a GitHub repository to multiple AI coding platforms.
+            Select a GitHub repository and choose which platforms to connect.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* GitHub URL Input */}
+          {/* Repository Selection */}
           <div>
-            <label className="text-sm font-medium mb-2 block">GitHub Repository</label>
-            <ProjectUrlInput
-              value={projectUrl}
-              onChange={setProjectUrl}
-              onValidationChange={handleValidationChange}
+            <label className="text-sm font-medium mb-2 block">
+              Select Repository
+              {selectedRepo && (
+                <span className="ml-2 text-primary font-normal">
+                  — {selectedRepo.full_name}
+                </span>
+              )}
+            </label>
+            <RepoPicker
+              hasToken={hasToken}
+              onSelectRepo={setSelectedRepo}
+              selectedRepoId={selectedRepo?.id ?? null}
             />
           </div>
 
           {/* Platform Selection */}
-          <div className={!isProjectValid ? "opacity-50 pointer-events-none" : ""}>
+          <div className={!selectedRepo ? "opacity-50 pointer-events-none" : ""}>
             <label className="text-sm font-medium mb-2 block">
               Select Platforms ({selectedPlatforms.length} selected)
             </label>
@@ -167,9 +195,16 @@ export const CreateBridgeDialog = ({ onCreateBridge, canCreate }: CreateBridgeDi
           <Button
             variant="glow"
             onClick={handleCreate}
-            disabled={!isProjectValid || selectedPlatforms.length === 0 || isCreating}
+            disabled={!selectedRepo || selectedPlatforms.length === 0 || isCreating}
           >
-            {isCreating ? "Creating..." : "Create Bridge"}
+            {isCreating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Bridge"
+            )}
           </Button>
         </div>
       </DialogContent>

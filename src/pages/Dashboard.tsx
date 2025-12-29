@@ -9,19 +9,21 @@ import { CreateBridgeDialog } from "@/components/dashboard/CreateBridgeDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Dashboard = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, profile, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { bridges, isLoading, createBridge, deleteBridge, canCreateBridge, bridgeLimit } = useBridges();
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate("/");
+    if (!authLoading && !isAuthenticated) {
+      navigate("/auth");
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
-  if (!isAuthenticated) {
+  if (authLoading || !isAuthenticated) {
     return null;
   }
+
+  const isPaid = profile?.is_paid || false;
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,7 +43,7 @@ const Dashboard = () => {
         </div>
 
         {/* Upgrade Banner (for free users) */}
-        {!user?.is_paid && (
+        {!isPaid && (
           <div className="glass p-6 rounded-xl border border-yellow-500/30 bg-yellow-500/5 mb-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
