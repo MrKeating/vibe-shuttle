@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Layers, Zap, GitBranch, Github, CheckCircle2, LogIn } from "lucide-react";
+import { Layers, Zap, GitBranch, LogIn, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PlatformCard } from "@/components/PlatformCard";
@@ -36,7 +36,7 @@ const features = [
 ];
 
 const Index = () => {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [projectUrl, setProjectUrl] = useState("");
@@ -93,9 +93,9 @@ const Index = () => {
                 Dashboard
               </Button>
             ) : (
-              <Button variant="glow" size="sm" onClick={login}>
-                <Github className="w-4 h-4 mr-2" />
-                Sign in with GitHub
+              <Button variant="glow" size="sm" onClick={() => navigate("/auth")}>
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In
               </Button>
             )}
           </div>

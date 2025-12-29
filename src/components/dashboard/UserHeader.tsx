@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Crown, Layers, Github, Settings } from "lucide-react";
+import { LogOut, Crown, Layers, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -8,10 +8,14 @@ import { Link } from "react-router-dom";
 import { GitHubPatDialog } from "./GitHubPatDialog";
 
 export const UserHeader = () => {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const [patDialogOpen, setPatDialogOpen] = useState(false);
 
   if (!user) return null;
+
+  const displayName = profile?.github_username || user.email?.split("@")[0] || "User";
+  const avatarUrl = profile?.avatar_url || undefined;
+  const isPaid = profile?.is_paid || false;
 
   return (
     <header className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-50">
@@ -24,7 +28,7 @@ export const UserHeader = () => {
         </Link>
 
         <div className="flex items-center gap-4">
-          {user.is_paid ? (
+          {isPaid ? (
             <Badge variant="secondary" className="gap-1 bg-yellow-500/20 text-yellow-500">
               <Crown className="w-3 h-3" />
               Pro
@@ -37,10 +41,10 @@ export const UserHeader = () => {
 
           <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8">
-              <AvatarImage src={user.avatar_url} alt={user.github_username} />
-              <AvatarFallback>{user.github_username.slice(0, 2).toUpperCase()}</AvatarFallback>
+              <AvatarImage src={avatarUrl} alt={displayName} />
+              <AvatarFallback>{displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium hidden sm:block">{user.github_username}</span>
+            <span className="text-sm font-medium hidden sm:block">{displayName}</span>
           </div>
 
           <Button variant="ghost" size="icon" onClick={() => setPatDialogOpen(true)} title="GitHub Settings">

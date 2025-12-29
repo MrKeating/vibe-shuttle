@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface Bridge {
   id: string;
@@ -12,37 +13,33 @@ export interface Bridge {
   config_created_at: string | null;
 }
 
-// Mock bridges for development
-const MOCK_BRIDGES: Bridge[] = [
-  {
-    id: "bridge-1",
-    github_repo_url: "https://github.com/demo-user/my-awesome-app",
-    repo_name: "my-awesome-app",
-    platforms: ["lovable", "cursor", "bolt"],
-    status: "active",
-    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
-    config_created_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
 export const useBridges = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [bridges, setBridges] = useState<Bridge[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      // Mock fetch - in production this would use Supabase
-      setIsLoading(true);
-      setTimeout(() => {
-        setBridges(MOCK_BRIDGES);
-        setIsLoading(false);
-      }, 500);
-    } else {
+  const fetchBridges = async () => {
+    if (!user) {
       setBridges([]);
       setIsLoading(false);
+      return;
     }
+
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("bridges")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setBridges(data);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchBridges();
   }, [user]);
 
   const createBridge = async (data: {
@@ -50,25 +47,33 @@ export const useBridges = () => {
     repo_name: string;
     platforms: string[];
   }) => {
-    // Mock create - in production this would use Supabase
-    const newBridge: Bridge = {
-      id: `bridge-${Date.now()}`,
-      ...data,
-      status: "active",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      config_created_at: null,
-    };
-    setBridges((prev) => [...prev, newBridge]);
+    if (!user) throw new Error("Not authenticated");
+
+    const { data: newBridge, error } = await supabase
+      .from("bridges")
+      .insert({
+        user_id: user.id,
+        github_repo_url: data.github_repo_url,
+        repo_name: data.repo_name,
+        platforms: data.platforms,
+        config_created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    
+    setBridges((prev) => [newBridge, ...prev]);
     return newBridge;
   };
 
   const deleteBridge = async (id: string) => {
-    // Mock delete - in production this would use Supabase
+    const { error } = await supabase.from("bridges").delete().eq("id", id);
+    if (error) throw error;
     setBridges((prev) => prev.filter((b) => b.id !== id));
   };
 
-  const canCreateBridge = user?.is_paid || bridges.length < 1;
+  const canCreateBridge = profile?.is_paid || bridges.length < 1;
 
   return {
     bridges,
@@ -76,6 +81,6 @@ export const useBridges = () => {
     createBridge,
     deleteBridge,
     canCreateBridge,
-    bridgeLimit: user?.is_paid ? Infinity : 1,
+    bridgeLimit: profile?.is_paid ? Infinity : 1,
   };
 };
