@@ -278,15 +278,32 @@ async function getFileContent(token: string, owner: string, repo: string, path: 
 }
 
 async function createRepo(token: string, name: string, description: string, isPrivate: boolean) {
-  return await githubFetch(token, "/user/repos", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      description,
-      private: isPrivate,
-      auto_init: true,
-    }),
-  });
+  // Validate repo name - GitHub requires specific format
+  const validName = name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/--+/g, '-');
+  
+  console.log("Creating repo:", { name, validName, description, isPrivate });
+  
+  try {
+    return await githubFetch(token, "/user/repos", {
+      method: "POST",
+      body: JSON.stringify({
+        name: validName,
+        description,
+        private: isPrivate,
+        auto_init: true,
+      }),
+    });
+  } catch (error: any) {
+    console.error("createRepo error:", error.message);
+    // Provide more helpful error messages
+    if (error.message?.includes("name already exists")) {
+      throw new GitHubApiError(422, `Repository "${validName}" already exists. Please choose a different name.`);
+    }
+    if (error.message?.includes("422")) {
+      throw new GitHubApiError(422, `Could not create repository "${validName}". The name may already exist or be invalid.`);
+    }
+    throw error;
+  }
 }
 
 async function pushFiles(
