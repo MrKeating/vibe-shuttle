@@ -15,6 +15,13 @@ interface GitHubRepo {
   default_branch: string;
 }
 
+interface FileTreeItem {
+  path: string;
+  type: "blob" | "tree";
+  sha: string;
+  size?: number;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,6 +73,7 @@ Deno.serve(async (req) => {
 
     const githubToken = profile.github_pat;
     const { action, ...params } = await req.json();
+    console.log("Action:", action, "Params:", Object.keys(params));
 
     let result;
 
@@ -84,6 +92,18 @@ Deno.serve(async (req) => {
         break;
       case "validate-token":
         result = await validateToken(githubToken);
+        break;
+      case "get-tree":
+        result = await getRepoTree(githubToken, params.owner, params.repo, params.branch);
+        break;
+      case "get-file-content":
+        result = await getFileContent(githubToken, params.owner, params.repo, params.path, params.branch);
+        break;
+      case "create-repo":
+        result = await createRepo(githubToken, params.name, params.description, params.isPrivate);
+        break;
+      case "push-files":
+        result = await pushFiles(githubToken, params.owner, params.repo, params.files, params.message, params.branch);
         break;
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
@@ -111,7 +131,7 @@ async function githubFetch(token: string, endpoint: string, options: RequestInit
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "VibeBridge-App",
+      "User-Agent": "VibeMerge-App",
       ...options.headers,
     },
   });
@@ -183,4 +203,123 @@ async function getFile(token: string, owner: string, repo: string, path: string)
   } catch {
     return { exists: false };
   }
+}
+
+// New functions for VibeMerge
+
+async function getRepoTree(token: string, owner: string, repo: string, branch?: string): Promise<FileTreeItem[]> {
+  // Get default branch if not specified
+  if (!branch) {
+    const repoInfo = await githubFetch(token, `/repos/${owner}/${repo}`);
+    branch = repoInfo.default_branch;
+  }
+  
+  const tree = await githubFetch(token, `/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`);
+  return tree.tree.map((item: any) => ({
+    path: item.path,
+    type: item.type,
+    sha: item.sha,
+    size: item.size,
+  }));
+}
+
+async function getFileContent(token: string, owner: string, repo: string, path: string, branch?: string) {
+  try {
+    const ref = branch ? `?ref=${branch}` : "";
+    const file = await githubFetch(token, `/repos/${owner}/${repo}/contents/${path}${ref}`);
+    
+    if (file.type === "file" && file.content) {
+      // Decode base64 content
+      const content = atob(file.content.replace(/\n/g, ""));
+      return { exists: true, content, sha: file.sha, size: file.size };
+    }
+    
+    return { exists: false, error: "Not a file" };
+  } catch (error: any) {
+    console.error("getFileContent error:", error.message);
+    return { exists: false, error: error.message };
+  }
+}
+
+async function createRepo(token: string, name: string, description: string, isPrivate: boolean) {
+  return await githubFetch(token, "/user/repos", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      description,
+      private: isPrivate,
+      auto_init: true,
+    }),
+  });
+}
+
+async function pushFiles(
+  token: string,
+  owner: string,
+  repo: string,
+  files: { path: string; content: string }[],
+  message: string,
+  branch?: string
+) {
+  // Get default branch if not specified
+  if (!branch) {
+    const repoInfo = await githubFetch(token, `/repos/${owner}/${repo}`);
+    branch = repoInfo.default_branch;
+  }
+
+  // Get the latest commit SHA
+  const refData = await githubFetch(token, `/repos/${owner}/${repo}/git/ref/heads/${branch}`);
+  const latestCommitSha = refData.object.sha;
+
+  // Get the tree SHA from the latest commit
+  const commitData = await githubFetch(token, `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`);
+  const baseTreeSha = commitData.tree.sha;
+
+  // Create blobs for each file
+  const treeItems = await Promise.all(
+    files.map(async (file) => {
+      const blob = await githubFetch(token, `/repos/${owner}/${repo}/git/blobs`, {
+        method: "POST",
+        body: JSON.stringify({
+          content: file.content,
+          encoding: "utf-8",
+        }),
+      });
+      return {
+        path: file.path,
+        mode: "100644",
+        type: "blob",
+        sha: blob.sha,
+      };
+    })
+  );
+
+  // Create a new tree
+  const newTree = await githubFetch(token, `/repos/${owner}/${repo}/git/trees`, {
+    method: "POST",
+    body: JSON.stringify({
+      base_tree: baseTreeSha,
+      tree: treeItems,
+    }),
+  });
+
+  // Create a new commit
+  const newCommit = await githubFetch(token, `/repos/${owner}/${repo}/git/commits`, {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      tree: newTree.sha,
+      parents: [latestCommitSha],
+    }),
+  });
+
+  // Update the reference
+  await githubFetch(token, `/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      sha: newCommit.sha,
+    }),
+  });
+
+  return { success: true, commit_sha: newCommit.sha };
 }
