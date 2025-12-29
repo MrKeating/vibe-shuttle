@@ -289,7 +289,7 @@ export const CreateMergeDialog = ({ onMergeComplete }: CreateMergeDialogProps) =
                     </span>
                   )}
                   <Button variant="glow" onClick={handleProceedToOutput}>
-                    Continue
+                    Choose Output
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </div>
