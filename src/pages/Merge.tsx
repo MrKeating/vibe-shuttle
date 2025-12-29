@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GitMerge, Loader2, ArrowRight, ArrowLeft, ExternalLink, FolderPlus } from "lucide-react";
+import { GitMerge, Loader2, ArrowRight, ArrowLeft, ExternalLink, FolderPlus, Eye, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMerge, type FileConflict, type GitHubRepo } from "@/hooks/useMerge";
 import { useBridges } from "@/hooks/useBridges";
+import { detectPlatform, getOriginPlatformUrl } from "@/lib/platformDetection";
 
 type Step = "select-repos" | "preview-diff" | "configure-output" | "merging";
 type OutputType = "new-repo" | "existing-repo";
@@ -408,13 +409,45 @@ const Merge = () => {
                     {mergedRepo.full_name}
                   </span>
                 </p>
-                <div className="flex gap-3 justify-center">
+                
+                {/* Check if pushed to existing repo with known origin */}
+                {outputType === "existing-repo" && destinationRepo && (() => {
+                  const originUrl = getOriginPlatformUrl(destinationRepo.html_url, destinationRepo.description);
+                  const platform = detectPlatform(destinationRepo.html_url, destinationRepo.description);
+                  
+                  if (originUrl && platform) {
+                    return (
+                      <div className="mb-6 p-4 rounded-xl border border-border bg-muted/50">
+                        <p className="text-sm text-muted-foreground mb-3">
+                          This repo originated from <span className="font-medium" style={{ color: platform.color }}>{platform.name}</span>
+                        </p>
+                        <Button
+                          variant="glow"
+                          onClick={() => window.open(originUrl, "_blank")}
+                        >
+                          <Undo2 className="w-4 h-4 mr-2" />
+                          Return to {platform.name}
+                        </Button>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                
+                <div className="flex gap-3 justify-center flex-wrap">
                   <Button
                     variant="outline"
                     onClick={() => window.open(mergedRepo.html_url, "_blank")}
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View on GitHub
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/view-project?repo=${encodeURIComponent(mergedRepo.full_name)}`)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Project
                   </Button>
                   <Button variant="glow" onClick={() => navigate("/dashboard")}>
                     Back to Dashboard
