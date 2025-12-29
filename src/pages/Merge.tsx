@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GitMerge, Loader2, ArrowRight, ArrowLeft, ExternalLink, FolderPlus, Eye, Undo2 } from "lucide-react";
+import { GitMerge, Loader2, ArrowRight, ArrowLeft, ExternalLink, FolderPlus, Eye, Undo2, FolderTree, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,12 +14,14 @@ import { useMerge, type FileConflict, type GitHubRepo } from "@/hooks/useMerge";
 import { useBridges } from "@/hooks/useBridges";
 import { detectPlatform, getOriginPlatformUrl } from "@/lib/platformDetection";
 
-type Step = "select-repos" | "preview-diff" | "configure-output" | "merging";
+type Step = "select-mode" | "select-repos" | "preview-diff" | "configure-output" | "configure-folder" | "merging";
 type OutputType = "new-repo" | "existing-repo";
+type MergeMode = "standard" | "folder";
 
 const Merge = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>("select-repos");
+  const [step, setStep] = useState<Step>("select-mode");
+  const [mergeMode, setMergeMode] = useState<MergeMode>("folder");
   const [sourceRepo, setSourceRepo] = useState<GitHubRepo | null>(null);
   const [targetRepo, setTargetRepo] = useState<GitHubRepo | null>(null);
   const [conflicts, setConflicts] = useState<FileConflict[]>([]);
@@ -28,9 +30,10 @@ const Merge = () => {
   const [isPrivate, setIsPrivate] = useState(false);
   const [destinationRepo, setDestinationRepo] = useState<GitHubRepo | null>(null);
   const [mergedRepo, setMergedRepo] = useState<GitHubRepo | null>(null);
+  const [folderPrefix, setFolderPrefix] = useState("ai-studio");
   const { toast } = useToast();
   const { profile, isAuthenticated, isLoading: authLoading } = useAuth();
-  const { loading, analyzeRepos, executeMerge, getFileContent } = useMerge();
+  const { loading, analyzeRepos, executeMerge, getFileContent, getRepoTree } = useMerge();
   const { createBridge } = useBridges();
 
   const hasToken = !!profile?.github_pat;
@@ -87,6 +90,79 @@ const Merge = () => {
       setNewRepoName(`${sourceRepo.name}-${targetRepo.name}-merged`);
     }
     setStep("configure-output");
+  };
+
+  // Folder Mode: skip diff, go directly to folder config
+  const handleFolderModeNext = () => {
+    if (sourceRepo && targetRepo) {
+      setStep("configure-folder");
+    }
+  };
+
+  // Folder Mode merge - get all source files, prefix with folder, push to target
+  const handleFolderModeMerge = async () => {
+    if (!sourceRepo || !targetRepo) return;
+
+    setStep("merging");
+
+    try {
+      const [sourceOwner, sourceRepoName] = sourceRepo.full_name.split("/");
+      const [targetOwner, targetRepoName] = targetRepo.full_name.split("/");
+
+      // Get all files from source repo
+      const sourceTree = await getRepoTree(sourceOwner, sourceRepoName);
+      const sourceFiles = sourceTree.filter(f => f.type === "blob");
+
+      if (sourceFiles.length === 0) {
+        toast({
+          title: "No files to import",
+          description: "The source repository appears to be empty.",
+          variant: "destructive",
+        });
+        setStep("configure-folder");
+        return;
+      }
+
+      // Fetch content for all source files and prefix paths
+      const filesToPush: { path: string; content: string }[] = [];
+      const prefix = folderPrefix.replace(/^\/+|\/+$/g, ""); // trim slashes
+
+      for (const file of sourceFiles) {
+        const result = await getFileContent(sourceOwner, sourceRepoName, file.path);
+        if (result.content) {
+          filesToPush.push({
+            path: `${prefix}/${file.path}`,
+            content: result.content,
+          });
+        }
+      }
+
+      console.log("Folder mode - files to push:", filesToPush.length, filesToPush.map(f => f.path));
+
+      // Push to target repo (existing repo)
+      const result = await executeMerge(
+        sourceRepo,
+        targetRepo, // always push to existing target in folder mode
+        null, // no new repo
+        filesToPush,
+        false
+      );
+
+      setMergedRepo(result);
+
+      await createBridge({
+        github_repo_url: result.html_url,
+        repo_name: result.name,
+        platforms: ["folder-sync"],
+      });
+
+      toast({
+        title: "Folder Sync Complete!",
+        description: `Source repo imported into ${result.full_name}/${prefix}/`,
+      });
+    } catch (e) {
+      setStep("configure-folder");
+    }
   };
 
   const handleMerge = async () => {
@@ -184,10 +260,12 @@ const Merge = () => {
     (c) => c.status === "conflict" && !c.resolved
   ).length;
 
-  const stepLabels = {
+  const stepLabels: Record<Step, string> = {
+    "select-mode": "Choose Mode",
     "select-repos": "Select Repositories",
     "preview-diff": "Review Changes",
     "configure-output": "Configure Output",
+    "configure-folder": "Configure Folder",
     "merging": mergedRepo ? "Complete" : "Merging...",
   };
 
@@ -209,12 +287,85 @@ const Merge = () => {
           </div>
         </div>
 
+        {/* Step: Select Mode */}
+        {step === "select-mode" && (
+          <div className="flex-1 flex flex-col">
+            <div className="mb-6">
+              <h1 className="font-heading text-2xl font-bold mb-2">Choose Merge Mode</h1>
+              <p className="text-muted-foreground">Select how you want to combine your repositories.</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6 flex-1 max-w-4xl mx-auto">
+              {/* Folder Mode */}
+              <button
+                onClick={() => setMergeMode("folder")}
+                className={`p-8 rounded-xl border-2 text-left transition-all ${
+                  mergeMode === "folder"
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50 bg-background"
+                }`}
+              >
+                <FolderTree className="w-12 h-12 mb-4 text-primary" />
+                <h3 className="font-semibold text-xl mb-2">Folder Mode (Subtree)</h3>
+                <p className="text-muted-foreground mb-4">
+                  Import source repo into a subfolder of the target repo. Perfect for syncing 
+                  AI Studio code into Lovable under <code className="text-primary">/ai-studio/</code>
+                </p>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• No file conflicts - code lives in separate folders</li>
+                  <li>• Target repo stays intact</li>
+                  <li>• Can re-run to update the folder</li>
+                </ul>
+              </button>
+
+              {/* Standard Mode */}
+              <button
+                onClick={() => setMergeMode("standard")}
+                className={`p-8 rounded-xl border-2 text-left transition-all ${
+                  mergeMode === "standard"
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50 bg-background"
+                }`}
+              >
+                <Layers className="w-12 h-12 mb-4 text-primary" />
+                <h3 className="font-semibold text-xl mb-2">Standard Merge</h3>
+                <p className="text-muted-foreground mb-4">
+                  Compare files and merge at root level. Useful when you want to combine 
+                  two codebases into one unified project.
+                </p>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Compare and resolve conflicts</li>
+                  <li>• Files merged at root level</li>
+                  <li>• Create new repo or push to existing</li>
+                </ul>
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-6 border-t border-border mt-6">
+              <Button variant="ghost" onClick={() => navigate("/dashboard")}>
+                Cancel
+              </Button>
+              <Button variant="glow" onClick={() => setStep("select-repos")}>
+                Continue
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Step: Select Repos */}
         {step === "select-repos" && (
           <div className="flex-1 flex flex-col">
             <div className="mb-6">
-              <h1 className="font-heading text-2xl font-bold mb-2">Select Repositories to Merge</h1>
-              <p className="text-muted-foreground">Choose two GitHub repositories to merge together.</p>
+              <h1 className="font-heading text-2xl font-bold mb-2">
+                {mergeMode === "folder" ? "Select Repositories for Folder Sync" : "Select Repositories to Merge"}
+              </h1>
+              <p className="text-muted-foreground">
+                {mergeMode === "folder" 
+                  ? "Choose the source (AI Studio) and target (Lovable) repositories."
+                  : "Choose two GitHub repositories to merge together."
+                }
+              </p>
             </div>
 
             <div className="grid md:grid-cols-2 gap-6 flex-1">
@@ -229,7 +380,10 @@ const Merge = () => {
                   )}
                 </Label>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Files from this repo will be merged into the target
+                  {mergeMode === "folder"
+                    ? "The repo to import (e.g., AI Studio export)"
+                    : "Files from this repo will be merged into the target"
+                  }
                 </p>
                 <RepoPicker
                   hasToken={hasToken}
@@ -249,7 +403,10 @@ const Merge = () => {
                   )}
                 </Label>
                 <p className="text-sm text-muted-foreground mb-4">
-                  This repo's structure will be the base for merging
+                  {mergeMode === "folder"
+                    ? "The canonical repo (e.g., Lovable project)"
+                    : "This repo's structure will be the base for merging"
+                  }
                 </p>
                 <RepoPicker
                   hasToken={hasToken}
@@ -259,27 +416,44 @@ const Merge = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-6 border-t border-border mt-6">
-              <Button variant="ghost" onClick={() => navigate("/dashboard")}>
-                Cancel
+            <div className="flex justify-between gap-2 pt-6 border-t border-border mt-6">
+              <Button variant="ghost" onClick={() => setStep("select-mode")}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
               </Button>
-              <Button
-                variant="glow"
-                onClick={handleAnalyze}
-                disabled={!sourceRepo || !targetRepo || loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    Analyze Differences
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => navigate("/dashboard")}>
+                  Cancel
+                </Button>
+                {mergeMode === "folder" ? (
+                  <Button
+                    variant="glow"
+                    onClick={handleFolderModeNext}
+                    disabled={!sourceRepo || !targetRepo}
+                  >
+                    Configure Folder
                     <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="glow"
+                    onClick={handleAnalyze}
+                    disabled={!sourceRepo || !targetRepo || loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        Analyze Differences
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
                 )}
-              </Button>
+              </div>
             </div>
           </div>
         )}
@@ -321,6 +495,84 @@ const Merge = () => {
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Configure Folder (Folder Mode only) */}
+        {step === "configure-folder" && sourceRepo && targetRepo && (
+          <div className="flex-1 flex flex-col">
+            <div className="mb-6">
+              <h1 className="font-heading text-2xl font-bold mb-2">Configure Folder Sync</h1>
+              <p className="text-muted-foreground">
+                All files from <span className="font-medium text-primary">{sourceRepo.full_name}</span> will be 
+                imported into <span className="font-medium text-primary">{targetRepo.full_name}</span> under a subfolder.
+              </p>
+            </div>
+
+            <div className="glass p-6 rounded-xl space-y-6 max-w-2xl">
+              <div>
+                <Label htmlFor="folder-prefix" className="text-base font-semibold">
+                  Target Folder Path
+                </Label>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Source files will be placed in this folder inside the target repo
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">/</span>
+                  <Input
+                    id="folder-prefix"
+                    value={folderPrefix}
+                    onChange={(e) => setFolderPrefix(e.target.value.replace(/^\/+/, ""))}
+                    placeholder="ai-studio"
+                    className="flex-1"
+                  />
+                  <span className="text-muted-foreground">/</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                <h4 className="font-medium mb-2">Preview</h4>
+                <p className="text-sm text-muted-foreground font-mono">
+                  {targetRepo.full_name}/<span className="text-primary">{folderPrefix || "ai-studio"}</span>/
+                  <span className="text-foreground">*</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  This will not overwrite existing files outside this folder
+                </p>
+              </div>
+
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <h4 className="font-medium text-amber-600 mb-1">Note</h4>
+                <p className="text-sm text-muted-foreground">
+                  If files already exist at this path, they will be updated. This is similar to 
+                  running <code className="text-xs bg-muted px-1 rounded">git subtree pull</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-6 border-t border-border mt-6">
+              <Button variant="ghost" onClick={() => setStep("select-repos")}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <Button
+                variant="glow"
+                onClick={handleFolderModeMerge}
+                disabled={!folderPrefix || loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <FolderTree className="w-4 h-4 mr-2" />
+                    Import to Folder
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         )}
