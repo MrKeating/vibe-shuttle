@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Layers, Crown, Sparkles } from "lucide-react";
+import { GitMerge, Crown, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBridges } from "@/hooks/useBridges";
 import { UserHeader } from "@/components/dashboard/UserHeader";
 import { BridgeCard } from "@/components/dashboard/BridgeCard";
-import { CreateBridgeDialog } from "@/components/dashboard/CreateBridgeDialog";
+import { CreateMergeDialog } from "@/components/merge/CreateMergeDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Dashboard = () => {
@@ -25,6 +25,15 @@ const Dashboard = () => {
 
   const isPaid = profile?.is_paid || false;
 
+  const handleMergeComplete = async (repo: any) => {
+    // Create a bridge record for the merged repo
+    await createBridge({
+      github_repo_url: repo.html_url,
+      repo_name: repo.name,
+      platforms: ["merged"],
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <UserHeader />
@@ -33,13 +42,13 @@ const Dashboard = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="font-heading text-3xl font-bold mb-1">Your Bridges</h1>
+            <h1 className="font-heading text-3xl font-bold mb-1">Your Merges</h1>
             <p className="text-muted-foreground">
-              {bridges.length} of {bridgeLimit === Infinity ? "∞" : bridgeLimit} bridge
-              {bridgeLimit !== 1 ? "s" : ""} used
+              {bridges.length} of {bridgeLimit === Infinity ? "∞" : bridgeLimit} merge
+              {bridgeLimit !== 1 ? "s" : ""} completed
             </p>
           </div>
-          <CreateBridgeDialog onCreateBridge={createBridge} canCreate={canCreateBridge} />
+          <CreateMergeDialog onMergeComplete={handleMergeComplete} />
         </div>
 
         {/* Upgrade Banner (for free users) */}
@@ -51,10 +60,10 @@ const Dashboard = () => {
               </div>
               <div className="flex-1">
                 <h3 className="font-heading font-semibold text-foreground mb-1">
-                  Upgrade to Pro for Unlimited Bridges
+                  Upgrade to Pro for Unlimited Merges
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  One-time payment of $29. Bridge unlimited repositories and unlock priority support.
+                  One-time payment of $29. Merge unlimited repositories and unlock priority support.
                 </p>
               </div>
               <button className="px-4 py-2 rounded-lg bg-yellow-500 text-yellow-950 font-medium hover:bg-yellow-400 transition-colors">
@@ -64,7 +73,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Bridges Grid */}
+        {/* Merges Grid */}
         {isLoading ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
@@ -74,13 +83,13 @@ const Dashboard = () => {
         ) : bridges.length === 0 ? (
           <div className="glass p-12 rounded-2xl text-center">
             <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <Layers className="w-8 h-8 text-primary" />
+              <GitMerge className="w-8 h-8 text-primary" />
             </div>
-            <h2 className="font-heading text-xl font-semibold mb-2">No bridges yet</h2>
+            <h2 className="font-heading text-xl font-semibold mb-2">No merges yet</h2>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Create your first bridge to connect a GitHub repository with multiple AI coding platforms.
+              Merge your first two GitHub repositories to combine code from different AI tools.
             </p>
-            <CreateBridgeDialog onCreateBridge={createBridge} canCreate={canCreateBridge} />
+            <CreateMergeDialog onMergeComplete={handleMergeComplete} />
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -98,21 +107,21 @@ const Dashboard = () => {
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="glass p-4 rounded-xl">
-              <h3 className="font-medium text-sm mb-1">Use each tool for its strengths</h3>
+              <h3 className="font-medium text-sm mb-1">Review conflicts carefully</h3>
               <p className="text-xs text-muted-foreground">
-                Lovable for UI, Cursor for complex logic, v0 for component design.
+                Use the diff viewer to compare file versions side-by-side before choosing.
               </p>
             </div>
             <div className="glass p-4 rounded-xl">
-              <h3 className="font-medium text-sm mb-1">Commit frequently</h3>
+              <h3 className="font-medium text-sm mb-1">Source vs Target</h3>
               <p className="text-xs text-muted-foreground">
-                Push changes before switching platforms to keep everything in sync.
+                Source files get merged into the target structure. Plan accordingly.
               </p>
             </div>
             <div className="glass p-4 rounded-xl">
-              <h3 className="font-medium text-sm mb-1">Config files coexist</h3>
+              <h3 className="font-medium text-sm mb-1">Create backups</h3>
               <p className="text-xs text-muted-foreground">
-                Platform-specific files like .cursorrules are ignored by other tools.
+                When pushing to existing repos, consider creating a backup branch first.
               </p>
             </div>
           </div>
