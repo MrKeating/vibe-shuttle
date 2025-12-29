@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, GitBranch, FolderTree, Layers, RefreshCw, Calendar, Loader2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, GitBranch, FolderTree, Layers, RefreshCw, Calendar, Loader2, Download } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { UserHeader } from "@/components/dashboard/UserHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMerge } from "@/hooks/useMerge";
+import { useToast } from "@/hooks/use-toast";
 
 interface BridgeDetail {
   id: string;
@@ -29,6 +31,9 @@ const MergeDetail = () => {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [bridge, setBridge] = useState<BridgeDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPulling, setIsPulling] = useState(false);
+  const { getRepoTree, getFileContent } = useMerge();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -60,11 +65,107 @@ const MergeDetail = () => {
     }
   }, [id, isAuthenticated, navigate]);
 
+  const handlePullLatest = async () => {
+    if (!bridge?.source_repo_url || !bridge?.github_repo_url) {
+      toast({
+        title: "Cannot Pull",
+        description: "Missing source or target repository information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsPulling(true);
+    try {
+      // Parse source repo
+      const sourceMatch = bridge.source_repo_url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+      if (!sourceMatch) throw new Error("Invalid source repo URL");
+      const [, sourceOwner, sourceRepo] = sourceMatch;
+
+      // Parse target repo
+      const targetMatch = bridge.github_repo_url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+      if (!targetMatch) throw new Error("Invalid target repo URL");
+      const [, targetOwner, targetRepo] = targetMatch;
+
+      const folderPrefix = bridge.folder_prefix || "ai-studio";
+
+      // Fetch source repo tree
+      const sourceTree = await getRepoTree(sourceOwner, sourceRepo.replace(/\.git$/, ""));
+      const sourceFiles = sourceTree.filter((f) => f.type === "blob");
+
+      if (sourceFiles.length === 0) {
+        toast({
+          title: "No Files",
+          description: "Source repository is empty.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch all file contents
+      const filesToPush: { path: string; content: string }[] = [];
+      for (const file of sourceFiles) {
+        const result = await getFileContent(sourceOwner, sourceRepo.replace(/\.git$/, ""), file.path);
+        if (result.exists && result.content) {
+          filesToPush.push({
+            path: `${folderPrefix}/${file.path}`,
+            content: result.content,
+          });
+        }
+      }
+
+      if (filesToPush.length === 0) {
+        toast({
+          title: "No Content",
+          description: "Could not fetch any file contents from source.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Push to target repo
+      const { data, error } = await supabase.functions.invoke("github-api", {
+        body: {
+          action: "push-files",
+          owner: targetOwner,
+          repo: targetRepo.replace(/\.git$/, ""),
+          files: filesToPush,
+          message: `Pull latest from ${sourceOwner}/${sourceRepo} into /${folderPrefix}/`,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      // Update bridge timestamp
+      await supabase
+        .from("bridges")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", bridge.id);
+
+      setBridge({ ...bridge, updated_at: new Date().toISOString() });
+
+      toast({
+        title: "Pull Complete",
+        description: `Synced ${filesToPush.length} files into /${folderPrefix}/`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Pull Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsPulling(false);
+    }
+  };
+
   if (authLoading || !isAuthenticated) {
     return null;
   }
 
   const isFolderMode = bridge?.merge_mode === "folder" || bridge?.platforms?.includes("folder-sync");
+  const canPull = isFolderMode && bridge?.source_repo_url;
 
   return (
     <div className="min-h-screen bg-background">
@@ -220,9 +321,23 @@ const MergeDetail = () => {
             {/* Actions */}
             {isFolderMode && (
               <div className="flex gap-3">
+                {canPull && (
+                  <Button 
+                    className="gap-2" 
+                    onClick={handlePullLatest}
+                    disabled={isPulling}
+                  >
+                    {isPulling ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    {isPulling ? "Pulling..." : "Pull Latest"}
+                  </Button>
+                )}
                 <Button variant="outline" className="gap-2" onClick={() => navigate("/merge")}>
                   <RefreshCw className="w-4 h-4" />
-                  Re-sync Source Repo
+                  New Merge
                 </Button>
               </div>
             )}
