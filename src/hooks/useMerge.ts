@@ -37,8 +37,23 @@ export const useMerge = () => {
       body: { action, ...params },
     });
 
-    if (error) throw error;
-    if (data.error) throw new Error(data.error);
+    if (error) {
+      const body = (error as any)?.context?.body;
+      let msg: string | undefined;
+
+      if (body) {
+        try {
+          const parsed = typeof body === "string" ? JSON.parse(body) : body;
+          msg = parsed?.error || parsed?.message;
+        } catch {
+          // ignore
+        }
+      }
+
+      throw new Error(msg || (error as any)?.message || "GitHub API error");
+    }
+
+    if ((data as any)?.error) throw new Error((data as any).error);
 
     return data;
   };
