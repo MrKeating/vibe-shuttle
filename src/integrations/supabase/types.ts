@@ -95,6 +95,59 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_history: {
+        Row: {
+          bridge_id: string
+          commit_message: string | null
+          commit_sha: string | null
+          created_at: string
+          error_message: string | null
+          files_count: number
+          id: string
+          operation: string
+          source_branch: string | null
+          status: string
+          target_branch: string | null
+          user_id: string
+        }
+        Insert: {
+          bridge_id: string
+          commit_message?: string | null
+          commit_sha?: string | null
+          created_at?: string
+          error_message?: string | null
+          files_count?: number
+          id?: string
+          operation: string
+          source_branch?: string | null
+          status?: string
+          target_branch?: string | null
+          user_id: string
+        }
+        Update: {
+          bridge_id?: string
+          commit_message?: string | null
+          commit_sha?: string | null
+          created_at?: string
+          error_message?: string | null
+          files_count?: number
+          id?: string
+          operation?: string
+          source_branch?: string | null
+          status?: string
+          target_branch?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_history_bridge_id_fkey"
+            columns: ["bridge_id"]
+            isOneToOne: false
+            referencedRelation: "bridges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
