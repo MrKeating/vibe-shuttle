@@ -636,7 +636,7 @@ const MergeDetail = () => {
                     ) : (
                       <Download className="w-4 h-4" />
                     )}
-                    {isLoadingPreview ? "Loading..." : "Pull Latest"}
+                    {isLoadingPreview ? "Loading..." : "Import from AI Studio"}
                   </Button>
                 )}
                 {canPush && (
