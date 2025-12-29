@@ -44,10 +44,12 @@ export const GitHubPatDialog = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      await supabase
-        .from("profiles")
-        .update({ github_pat: pat.trim() })
-        .eq("id", user.id);
+       const { error: updateError } = await supabase
+         .from("profiles")
+         .update({ github_pat: pat.trim() })
+         .eq("id", user.id);
+
+       if (updateError) throw updateError;
 
       // Now validate
       const result = await validateToken();
@@ -155,7 +157,7 @@ export const GitHubPatDialog = ({
           </div>
 
           <a
-            href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=VibeBridge"
+            href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=VibeMerge"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-primary hover:underline"

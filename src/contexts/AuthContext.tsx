@@ -16,6 +16,7 @@ interface AuthContextType {
   session: Session | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  refreshProfile: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -71,6 +72,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const refreshProfile = async () => {
+    if (!user) return;
+    await fetchProfile(user.id);
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -86,6 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         isAuthenticated: !!user,
         isLoading,
+        refreshProfile,
         logout,
       }}
     >
