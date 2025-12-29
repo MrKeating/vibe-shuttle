@@ -1,1 +1,4 @@
 project_id = "cckubyigrigzyohegliy"
+
+[functions.github-api]
+verify_jwt = false
