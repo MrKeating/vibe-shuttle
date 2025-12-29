@@ -290,7 +290,7 @@ async function createRepo(token: string, name: string, description: string, isPr
         name: validName,
         description,
         private: isPrivate,
-        auto_init: true,
+        auto_init: false, // Don't auto-init since we'll push files immediately
       }),
     });
   } catch (error: any) {
@@ -314,21 +314,15 @@ async function pushFiles(
   message: string,
   branch?: string
 ) {
-  // Get default branch if not specified
+  console.log("pushFiles starting:", { owner, repo, filesCount: files.length, branch });
+  
+  // Get repo info and default branch
+  const repoInfo = await githubFetch(token, `/repos/${owner}/${repo}`);
   if (!branch) {
-    const repoInfo = await githubFetch(token, `/repos/${owner}/${repo}`);
-    branch = repoInfo.default_branch;
+    branch = repoInfo.default_branch || "main";
   }
 
-  // Get the latest commit SHA
-  const refData = await githubFetch(token, `/repos/${owner}/${repo}/git/ref/heads/${branch}`);
-  const latestCommitSha = refData.object.sha;
-
-  // Get the tree SHA from the latest commit
-  const commitData = await githubFetch(token, `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`);
-  const baseTreeSha = commitData.tree.sha;
-
-  // Create blobs for each file
+  // Create blobs for each file first
   const treeItems = await Promise.all(
     files.map(async (file) => {
       const blob = await githubFetch(token, `/repos/${owner}/${repo}/git/blobs`, {
@@ -340,39 +334,79 @@ async function pushFiles(
       });
       return {
         path: file.path,
-        mode: "100644",
-        type: "blob",
+        mode: "100644" as const,
+        type: "blob" as const,
         sha: blob.sha,
       };
     })
   );
 
+  console.log("Blobs created:", treeItems.length);
+
+  // Check if repo has any commits (newly created repos might be empty)
+  let latestCommitSha: string | null = null;
+  let baseTreeSha: string | null = null;
+
+  try {
+    const refData = await githubFetch(token, `/repos/${owner}/${repo}/git/ref/heads/${branch}`);
+    latestCommitSha = refData.object.sha;
+    
+    const commitData = await githubFetch(token, `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`);
+    baseTreeSha = commitData.tree.sha;
+    console.log("Existing commit found:", { latestCommitSha, baseTreeSha });
+  } catch (error: any) {
+    console.log("No existing commits found, creating initial commit:", error.message);
+  }
+
   // Create a new tree
+  const treePayload: any = { tree: treeItems };
+  if (baseTreeSha) {
+    treePayload.base_tree = baseTreeSha;
+  }
+  
   const newTree = await githubFetch(token, `/repos/${owner}/${repo}/git/trees`, {
     method: "POST",
-    body: JSON.stringify({
-      base_tree: baseTreeSha,
-      tree: treeItems,
-    }),
+    body: JSON.stringify(treePayload),
   });
+
+  console.log("New tree created:", newTree.sha);
 
   // Create a new commit
+  const commitPayload: any = {
+    message,
+    tree: newTree.sha,
+  };
+  if (latestCommitSha) {
+    commitPayload.parents = [latestCommitSha];
+  } else {
+    commitPayload.parents = [];
+  }
+
   const newCommit = await githubFetch(token, `/repos/${owner}/${repo}/git/commits`, {
     method: "POST",
-    body: JSON.stringify({
-      message,
-      tree: newTree.sha,
-      parents: [latestCommitSha],
-    }),
+    body: JSON.stringify(commitPayload),
   });
 
-  // Update the reference
-  await githubFetch(token, `/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      sha: newCommit.sha,
-    }),
-  });
+  console.log("New commit created:", newCommit.sha);
 
+  // Update or create the reference
+  if (latestCommitSha) {
+    // Update existing ref
+    await githubFetch(token, `/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sha: newCommit.sha }),
+    });
+  } else {
+    // Create new ref for empty repo
+    await githubFetch(token, `/repos/${owner}/${repo}/git/refs`, {
+      method: "POST",
+      body: JSON.stringify({
+        ref: `refs/heads/${branch}`,
+        sha: newCommit.sha,
+      }),
+    });
+  }
+
+  console.log("Ref updated successfully");
   return { success: true, commit_sha: newCommit.sha };
 }
