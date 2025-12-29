@@ -651,7 +651,7 @@ const MergeDetail = () => {
                     ) : (
                       <Upload className="w-4 h-4" />
                     )}
-                    Push to Source
+                    Export to AI Studio
                   </Button>
                 )}
                 <Button variant="ghost" className="gap-2" onClick={() => navigate("/merge")}>
