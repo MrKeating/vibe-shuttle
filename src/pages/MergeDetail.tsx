@@ -216,8 +216,8 @@ const MergeDetail = () => {
         files_count: filesCount,
         commit_sha: commitSha,
         commit_message: operation === "pull" 
-          ? `Pull from source into /${bridge.folder_prefix || "ai-studio"}/`
-          : `Push from /${bridge.folder_prefix || "ai-studio"}/ to source`,
+          ? `Pull from source into /${bridge.folder_prefix || "src/ai-studio"}/`
+          : `Push from /${bridge.folder_prefix || "src/ai-studio"}/ to source`,
         status,
         error_message: errorMessage,
       });
@@ -236,7 +236,7 @@ const MergeDetail = () => {
       const sourceInfo = getRepoInfo(bridge.source_repo_url);
       if (!sourceInfo) throw new Error("Invalid source repo URL");
 
-      const folderPrefix = bridge.folder_prefix || "ai-studio";
+      const folderPrefix = bridge.folder_prefix || "src/ai-studio";
 
       const sourceTree = await getRepoTree(sourceInfo.owner, sourceInfo.repo, selectedSourceBranch);
       const sourceFiles = sourceTree.filter((f) => f.type === "blob");
@@ -323,7 +323,7 @@ const MergeDetail = () => {
       const targetInfo = getRepoInfo(bridge.github_repo_url);
       if (!sourceInfo || !targetInfo) throw new Error("Invalid repo URLs");
 
-      const folderPrefix = bridge.folder_prefix || "ai-studio";
+      const folderPrefix = bridge.folder_prefix || "src/ai-studio";
 
       // Fetch all file contents
       const filesToPush: { path: string; content: string }[] = [];
@@ -585,7 +585,7 @@ const MergeDetail = () => {
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
                   {isFolderMode 
-                    ? `This is your main Lovable repo. Source files live in /${bridge.folder_prefix || "ai-studio"}/`
+                    ? `This is your main Lovable repo. Source files live in /${bridge.folder_prefix || "src/ai-studio"}/`
                     : "The combined output of both repositories."
                   }
                 </p>
@@ -660,9 +660,9 @@ const MergeDetail = () => {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                <strong>Pull:</strong> Fetch files from source repo → write to /{bridge?.folder_prefix || "ai-studio"}/ (git subtree pull)
+                <strong>Pull:</strong> Fetch files from source repo → write to /{bridge?.folder_prefix || "src/ai-studio"}/ (git subtree pull)
                 <br />
-                <strong>Push:</strong> Export files from /{bridge?.folder_prefix || "ai-studio"}/ → push to source repo (git subtree split)
+                <strong>Push:</strong> Export files from /{bridge?.folder_prefix || "src/ai-studio"}/ → push to source repo (git subtree split)
               </p>
             </div>
 

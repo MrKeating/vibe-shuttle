@@ -30,7 +30,7 @@ const Merge = () => {
   const [isPrivate, setIsPrivate] = useState(false);
   const [destinationRepo, setDestinationRepo] = useState<GitHubRepo | null>(null);
   const [mergedRepo, setMergedRepo] = useState<GitHubRepo | null>(null);
-  const [folderPrefix, setFolderPrefix] = useState("ai-studio");
+  const [folderPrefix, setFolderPrefix] = useState("src/ai-studio");
   const { toast } = useToast();
   const { profile, isAuthenticated, isLoading: authLoading } = useAuth();
   const { loading, analyzeRepos, executeMerge, getFileContent, getRepoTree } = useMerge();
@@ -316,7 +316,7 @@ const Merge = () => {
                 <h3 className="font-semibold text-xl mb-2">Folder Mode (Subtree)</h3>
                 <p className="text-muted-foreground mb-4">
                   Import source repo into a subfolder of the target repo. Perfect for syncing 
-                  AI Studio code into Lovable under <code className="text-primary">/ai-studio/</code>
+                  AI Studio code into Lovable under <code className="text-primary">/src/ai-studio/</code>
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• No file conflicts - code lives in separate folders</li>
