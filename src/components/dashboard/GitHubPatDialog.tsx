@@ -157,7 +157,7 @@ export const GitHubPatDialog = ({
           </div>
 
           <a
-            href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=VibeMerge"
+            href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=VibeBridge"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-primary hover:underline"

@@ -64,7 +64,7 @@ interface Branch {
   protected: boolean;
 }
 
-const MergeDetail = () => {
+const BridgeDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -836,4 +836,4 @@ const MergeDetail = () => {
   );
 };
 
-export default MergeDetail;
+export default BridgeDetail;
