@@ -14,6 +14,7 @@
 
 // Version constant for tracking
 export const AI_STUDIO_VERSION = "1.0.0";
+export const AI_STUDIO_SYNCED_AT = "Not synced yet";
 
 // ============================================
 // SAFE EXPORTS ONLY - Add new exports manually
