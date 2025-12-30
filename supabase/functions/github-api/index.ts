@@ -121,6 +121,16 @@ Deno.serve(async (req) => {
           params.targetBranch
         );
         break;
+      case "delete-folder":
+        result = await deleteFolder(
+          githubToken,
+          params.owner,
+          params.repo,
+          params.folderPrefix,
+          params.message,
+          params.branch
+        );
+        break;
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400,
@@ -514,5 +524,88 @@ async function pushFolderToSource(
     commit_sha: result.commit_sha,
     source_branch: sBranch,
     target_branch: tBranch,
+  };
+}
+
+async function deleteFolder(
+  token: string,
+  owner: string,
+  repo: string,
+  folderPrefix: string,
+  message: string,
+  branch?: string
+) {
+  console.log("deleteFolder:", { owner, repo, folderPrefix });
+
+  // Get repo info and default branch
+  const repoInfo = await githubFetch(token, `/repos/${owner}/${repo}`);
+  const targetBranch = branch || repoInfo.default_branch || "main";
+
+  // Get the tree to find all files in the folder
+  const tree = await githubFetch(
+    token,
+    `/repos/${owner}/${repo}/git/trees/${targetBranch}?recursive=1`
+  );
+
+  // Filter files that are in the folder prefix
+  const prefixWithSlash = folderPrefix.endsWith("/") ? folderPrefix : `${folderPrefix}/`;
+  const folderFiles = tree.tree.filter(
+    (item: any) => item.type === "blob" && item.path.startsWith(prefixWithSlash)
+  );
+
+  if (folderFiles.length === 0) {
+    console.log(`No files found in /${folderPrefix}/ folder, nothing to delete`);
+    return { success: true, files_deleted: 0, message: "No files to delete" };
+  }
+
+  console.log(`Found ${folderFiles.length} files to delete in /${folderPrefix}/`);
+
+  // Get the current commit and tree
+  const refData = await githubFetch(token, `/repos/${owner}/${repo}/git/ref/heads/${targetBranch}`);
+  const latestCommitSha = refData.object.sha;
+  const commitData = await githubFetch(token, `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`);
+  const baseTreeSha = commitData.tree.sha;
+
+  // Create a new tree that excludes the folder files (by not including them)
+  // We need to get all files NOT in the folder and rebuild the tree
+  const allFiles = tree.tree.filter((item: any) => item.type === "blob");
+  const filesToKeep = allFiles.filter(
+    (item: any) => !item.path.startsWith(prefixWithSlash)
+  );
+
+  // Build tree items for files to keep (reference existing blobs by sha)
+  const treeItems = filesToKeep.map((file: any) => ({
+    path: file.path,
+    mode: "100644",
+    type: "blob",
+    sha: file.sha,
+  }));
+
+  // Create the new tree (without base_tree to get a clean tree)
+  const newTree = await githubFetch(token, `/repos/${owner}/${repo}/git/trees`, {
+    method: "POST",
+    body: JSON.stringify({ tree: treeItems }),
+  });
+
+  // Create new commit
+  const newCommit = await githubFetch(token, `/repos/${owner}/${repo}/git/commits`, {
+    method: "POST",
+    body: JSON.stringify({
+      message: message || `VibeBridge: remove /${folderPrefix}/ folder`,
+      tree: newTree.sha,
+      parents: [latestCommitSha],
+    }),
+  });
+
+  // Update ref
+  await githubFetch(token, `/repos/${owner}/${repo}/git/refs/heads/${targetBranch}`, {
+    method: "PATCH",
+    body: JSON.stringify({ sha: newCommit.sha }),
+  });
+
+  return {
+    success: true,
+    files_deleted: folderFiles.length,
+    commit_sha: newCommit.sha,
   };
 }

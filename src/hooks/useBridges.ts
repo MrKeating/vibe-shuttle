@@ -80,6 +80,41 @@ export const useBridges = () => {
   };
 
   const deleteBridge = async (id: string) => {
+    // Find the bridge to get folder info
+    const bridge = bridges.find((b) => b.id === id);
+    
+    // If this is a folder-mode bridge with a folder_prefix, delete the folder files first
+    if (bridge?.folder_prefix && bridge?.github_repo_url) {
+      try {
+        // Extract owner/repo from github_repo_url
+        const match = bridge.github_repo_url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+        if (match) {
+          const [, owner, repo] = match;
+          const repoName = repo.replace(/\.git$/, "");
+          
+          console.log("Deleting folder from repo:", { owner, repo: repoName, folder: bridge.folder_prefix });
+          
+          const { error: deleteError } = await supabase.functions.invoke("github-api", {
+            body: {
+              action: "delete-folder",
+              owner,
+              repo: repoName,
+              folderPrefix: bridge.folder_prefix,
+              message: `VibeBridge: remove synced folder /${bridge.folder_prefix}/`,
+            },
+          });
+          
+          if (deleteError) {
+            console.error("Failed to delete folder:", deleteError);
+            // Continue with bridge deletion even if folder deletion fails
+          }
+        }
+      } catch (error) {
+        console.error("Error deleting folder:", error);
+        // Continue with bridge deletion even if folder deletion fails
+      }
+    }
+    
     const { error } = await supabase.from("bridges").delete().eq("id", id);
     if (error) throw error;
     setBridges((prev) => prev.filter((b) => b.id !== id));
