@@ -440,7 +440,6 @@ const MergeDetail = () => {
     return null;
   }
 
-  const isFolderMode = bridge?.merge_mode === "folder" || bridge?.platforms?.includes("folder-sync");
   const canPull = bridge?.source_repo_url;
   const canPush = bridge?.source_repo_url && bridge?.folder_prefix;
 
@@ -474,18 +473,12 @@ const MergeDetail = () => {
             {/* Title Section */}
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
-                {isFolderMode ? (
-                  <FolderTree className="w-7 h-7 text-primary" />
-                ) : (
-                  <Layers className="w-7 h-7 text-primary" />
-                )}
+                <FolderTree className="w-7 h-7 text-primary" />
               </div>
               <div>
                 <h1 className="font-heading text-3xl font-bold mb-1">{bridge.repo_name}</h1>
                 <p className="text-muted-foreground">
-                  {isFolderMode 
-                    ? "Folder Mode Sync (git subtree)" 
-                    : "Standard Merge"}
+                  Folder Sync (git subtree)
                 </p>
               </div>
             </div>
@@ -553,10 +546,7 @@ const MergeDetail = () => {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {isFolderMode 
-                      ? "Files from this repo are synced into the target's subfolder."
-                      : "Files from this repo were merged into the target."
-                    }
+                    Files from this repo are synced into the target's subfolder.
                   </p>
                   <a
                     href={bridge.source_repo_url}
@@ -578,16 +568,13 @@ const MergeDetail = () => {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                      {isFolderMode ? "Target (Canonical) Repository" : "Merged Repository"}
+                      Target (Canonical) Repository
                     </span>
                     <h3 className="font-semibold">{bridge.repo_name}</h3>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {isFolderMode 
-                    ? `This is your main Lovable repo. Source files live in /${bridge.folder_prefix || "src/ai-studio"}/`
-                    : "The combined output of both repositories."
-                  }
+                  This is your main repo. Source files live in <code className="text-primary">/{bridge.folder_prefix || "src/ai-studio"}/</code>
                 </p>
                 <a
                   href={bridge.github_repo_url}
@@ -602,7 +589,7 @@ const MergeDetail = () => {
             </div>
 
             {/* Folder Mode Info */}
-            {isFolderMode && bridge.folder_prefix && (
+            {bridge.folder_prefix && (
               <div className="glass p-6 rounded-xl border border-border">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <FolderTree className="w-5 h-5 text-primary" />
@@ -721,10 +708,8 @@ const MergeDetail = () => {
               <h3 className="font-semibold mb-4">Details</h3>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground block mb-1">Merge Mode</span>
-                  <Badge variant="secondary">
-                    {isFolderMode ? "Folder Mode" : "Standard"}
-                  </Badge>
+                  <span className="text-muted-foreground block mb-1">Sync Mode</span>
+                  <Badge variant="secondary">Folder Sync</Badge>
                 </div>
                 <div>
                   <span className="text-muted-foreground block mb-1">Status</span>
@@ -757,7 +742,7 @@ const MergeDetail = () => {
             </DialogTitle>
             <DialogDescription>
               {previewFiles.length} files will be synced from <strong>{selectedSourceBranch}</strong> branch
-              {isFolderMode && bridge?.folder_prefix && ` into /${bridge.folder_prefix}/`}
+              {bridge?.folder_prefix && ` into /${bridge.folder_prefix}/`}
             </DialogDescription>
           </DialogHeader>
           
