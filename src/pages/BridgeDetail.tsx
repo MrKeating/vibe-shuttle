@@ -91,6 +91,10 @@ const BridgeDetail = () => {
   const [syncHistory, setSyncHistory] = useState<SyncHistoryEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  // Export folders selection
+  const [selectedExportFolders, setSelectedExportFolders] = useState<string[]>(["src/components", "src/pages"]);
+  const [destinationFolder, setDestinationFolder] = useState<string>("lovable");
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       navigate("/auth");
@@ -270,37 +274,39 @@ const BridgeDetail = () => {
   };
 
   const handlePreviewPush = async () => {
-    if (!bridge?.source_repo_url || !bridge?.folder_prefix) return;
+    if (!bridge?.source_repo_url) return;
 
     setIsLoadingPreview(true);
     try {
       const targetInfo = getRepoInfo(bridge.github_repo_url);
       if (!targetInfo) throw new Error("Invalid target repo URL");
 
-      const folderPrefix = bridge.folder_prefix;
-      const prefixWithSlash = folderPrefix.endsWith("/") ? folderPrefix : `${folderPrefix}/`;
-
       const targetTree = await getRepoTree(targetInfo.owner, targetInfo.repo, selectedTargetBranch);
-      const folderFiles = targetTree.filter(
-        (f) => f.type === "blob" && f.path.startsWith(prefixWithSlash)
-      );
+      
+      // Filter files from selected export folders
+      let matchingFiles: PreviewFile[] = [];
+      for (const folder of selectedExportFolders) {
+        const folderWithSlash = folder.endsWith("/") ? folder : `${folder}/`;
+        const folderFiles = targetTree
+          .filter((f) => f.type === "blob" && f.path.startsWith(folderWithSlash))
+          .map((f) => ({
+            path: f.path,
+            targetPath: `${destinationFolder}/${f.path}`,
+            size: f.size,
+          }));
+        matchingFiles.push(...folderFiles);
+      }
 
-      if (folderFiles.length === 0) {
+      if (matchingFiles.length === 0) {
         toast({
           title: "No Files",
-          description: `No files found in /${folderPrefix}/ folder.`,
+          description: `No files found in selected folders.`,
           variant: "destructive",
         });
         return;
       }
 
-      const files: PreviewFile[] = folderFiles.map((f) => ({
-        path: f.path,
-        targetPath: f.path.slice(prefixWithSlash.length),
-        size: f.size,
-      }));
-
-      setPushPreviewFiles(files);
+      setPushPreviewFiles(matchingFiles);
       setShowPushPreview(true);
     } catch (error: any) {
       toast({
@@ -392,7 +398,7 @@ const BridgeDetail = () => {
   };
 
   const handleConfirmPush = async () => {
-    if (!bridge?.source_repo_url || !bridge?.github_repo_url || !bridge?.folder_prefix) return;
+    if (!bridge?.source_repo_url || !bridge?.github_repo_url) return;
 
     setShowPushPreview(false);
     setIsPushing(true);
@@ -408,10 +414,12 @@ const BridgeDetail = () => {
           sourceRepo: sourceInfo.repo,
           targetOwner: targetInfo.owner,
           targetRepo: targetInfo.repo,
-          folderPrefix: bridge.folder_prefix,
-          message: `git subtree split: /${bridge.folder_prefix}/ → ${sourceInfo.owner}/${sourceInfo.repo}`,
+          folderPrefix: bridge.folder_prefix || "src/ai-studio",
+          message: `VibeBridge: export to /${destinationFolder}/ from Lovable`,
           sourceBranch: selectedSourceBranch,
           targetBranch: selectedTargetBranch,
+          exportFolders: selectedExportFolders,
+          destinationFolder: destinationFolder,
         },
       });
 
@@ -421,13 +429,13 @@ const BridgeDetail = () => {
       await logSyncOperation("push", data?.files_count || pushPreviewFiles.length, data?.commit_sha, "success");
 
       toast({
-        title: "Push Complete",
-        description: `Pushed ${data?.files_count || pushPreviewFiles.length} files to ${sourceInfo.owner}/${sourceInfo.repo}`,
+        title: "Export Complete",
+        description: `Exported ${data?.files_count || pushPreviewFiles.length} files to ${sourceInfo.owner}/${sourceInfo.repo}/${destinationFolder}/`,
       });
     } catch (error: any) {
       await logSyncOperation("push", 0, null, "failed", error.message);
       toast({
-        title: "Push Failed",
+        title: "Export Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -441,7 +449,23 @@ const BridgeDetail = () => {
   }
 
   const canPull = bridge?.source_repo_url;
-  const canPush = bridge?.source_repo_url && bridge?.folder_prefix;
+  const canPush = bridge?.source_repo_url && selectedExportFolders.length > 0;
+
+  const toggleExportFolder = (folder: string) => {
+    setSelectedExportFolders((prev) =>
+      prev.includes(folder)
+        ? prev.filter((f) => f !== folder)
+        : [...prev, folder]
+    );
+  };
+
+  const availableExportFolders = [
+    { id: "src/components", label: "Components", description: "src/components/" },
+    { id: "src/pages", label: "Pages", description: "src/pages/" },
+    { id: "src/hooks", label: "Hooks", description: "src/hooks/" },
+    { id: "src/lib", label: "Utilities", description: "src/lib/" },
+    { id: "src/contexts", label: "Contexts", description: "src/contexts/" },
+  ];
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return "";
@@ -595,12 +619,61 @@ const BridgeDetail = () => {
                   <FolderTree className="w-5 h-5 text-primary" />
                   Folder Structure
                 </h3>
-                <div className="bg-muted/50 p-4 rounded-lg font-mono text-sm">
-                  <div className="text-muted-foreground">your-lovable-repo/</div>
-                  <div className="ml-4">├── src/</div>
-                  <div className="ml-4">├── public/</div>
-                  <div className="ml-4 text-primary font-semibold">└── {bridge.folder_prefix}/  ← AI Studio code</div>
-                  <div className="ml-8 text-muted-foreground">├── ...</div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Import (AI Studio → Lovable)</p>
+                    <div className="bg-muted/50 p-3 rounded-lg font-mono text-xs">
+                      <div className="text-muted-foreground">your-lovable-repo/</div>
+                      <div className="ml-3 text-primary font-semibold">└── {bridge.folder_prefix}/  ← AI Studio code</div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Export (Lovable → AI Studio)</p>
+                    <div className="bg-muted/50 p-3 rounded-lg font-mono text-xs">
+                      <div className="text-muted-foreground">ai-studio-repo/</div>
+                      <div className="ml-3 text-yellow-500 font-semibold">└── {destinationFolder}/  ← Lovable code</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Export Settings */}
+            {canPull && (
+              <div className="glass p-6 rounded-xl border border-border">
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-yellow-500" />
+                  Export Settings
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Folders to export from Lovable:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {availableExportFolders.map((folder) => (
+                        <button
+                          key={folder.id}
+                          onClick={() => toggleExportFolder(folder.id)}
+                          className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                            selectedExportFolders.includes(folder.id)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/50 border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {folder.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Destination folder in AI Studio repo:</label>
+                    <input
+                      type="text"
+                      value={destinationFolder}
+                      onChange={(e) => setDestinationFolder(e.target.value)}
+                      className="w-full max-w-xs px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                      placeholder="lovable"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -641,15 +714,15 @@ const BridgeDetail = () => {
                     Export to AI Studio
                   </Button>
                 )}
-                <Button variant="ghost" className="gap-2" onClick={() => navigate("/merge")}>
+                <Button variant="ghost" className="gap-2" onClick={() => navigate("/bridge")}>
                   <RefreshCw className="w-4 h-4" />
-                  New Merge
+                  New Bridge
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                <strong>Pull:</strong> Fetch files from source repo → write to /{bridge?.folder_prefix || "src/ai-studio"}/ (git subtree pull)
+                <strong>Import:</strong> AI Studio → /{bridge?.folder_prefix || "src/ai-studio"}/ folder
                 <br />
-                <strong>Push:</strong> Export files from /{bridge?.folder_prefix || "src/ai-studio"}/ → push to source repo (git subtree split)
+                <strong>Export:</strong> Selected folders → /{destinationFolder}/ in AI Studio repo
               </p>
             </div>
 

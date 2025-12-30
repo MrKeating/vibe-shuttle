@@ -118,7 +118,9 @@ Deno.serve(async (req) => {
           params.folderPrefix,
           params.message,
           params.sourceBranch,
-          params.targetBranch
+          params.targetBranch,
+          params.exportFolders,
+          params.destinationFolder
         );
         break;
       case "delete-folder":
@@ -472,11 +474,13 @@ async function pushFolderToSource(
   folderPrefix: string,
   message: string,
   sourceBranch?: string,
-  targetBranch?: string
+  targetBranch?: string,
+  exportFolders?: string[],
+  destinationFolder?: string
 ) {
-  console.log("pushFolderToSource:", { sourceOwner, sourceRepo, targetOwner, targetRepo, folderPrefix });
+  console.log("pushFolderToSource:", { sourceOwner, sourceRepo, targetOwner, targetRepo, folderPrefix, exportFolders, destinationFolder });
 
-  // Get the tree from the target repo (Lovable repo with the folder)
+  // Get the tree from the target repo (Lovable repo)
   const targetRepoInfo = await githubFetch(token, `/repos/${targetOwner}/${targetRepo}`);
   const tBranch = targetBranch || targetRepoInfo.default_branch || "main";
 
@@ -485,31 +489,51 @@ async function pushFolderToSource(
     `/repos/${targetOwner}/${targetRepo}/git/trees/${tBranch}?recursive=1`
   );
 
-  // Filter files that are in the folder prefix
-  const prefixWithSlash = folderPrefix.endsWith("/") ? folderPrefix : `${folderPrefix}/`;
-  const folderFiles = targetTree.tree.filter(
-    (item: any) => item.type === "blob" && item.path.startsWith(prefixWithSlash)
-  );
-
-  if (folderFiles.length === 0) {
-    throw new GitHubApiError(400, `No files found in /${folderPrefix}/ folder`);
+  // Determine which files to export
+  let filesToExport: any[] = [];
+  
+  if (exportFolders && exportFolders.length > 0) {
+    // Export specific folders from the Lovable repo
+    for (const folder of exportFolders) {
+      const folderWithSlash = folder.endsWith("/") ? folder : `${folder}/`;
+      const matchingFiles = targetTree.tree.filter(
+        (item: any) => item.type === "blob" && item.path.startsWith(folderWithSlash)
+      );
+      filesToExport.push(...matchingFiles.map((f: any) => ({
+        ...f,
+        sourceFolder: folder,
+      })));
+    }
+  } else {
+    // Fallback: export from ai-studio folder (old behavior)
+    const prefixWithSlash = folderPrefix.endsWith("/") ? folderPrefix : `${folderPrefix}/`;
+    filesToExport = targetTree.tree
+      .filter((item: any) => item.type === "blob" && item.path.startsWith(prefixWithSlash))
+      .map((f: any) => ({ ...f, sourceFolder: folderPrefix }));
   }
 
-  console.log(`Found ${folderFiles.length} files in /${folderPrefix}/`);
+  if (filesToExport.length === 0) {
+    throw new GitHubApiError(400, `No files found in specified folders`);
+  }
 
-  // Fetch content for each file and remove the prefix
+  console.log(`Found ${filesToExport.length} files to export`);
+
+  // Fetch content for each file
   const filesToPush: { path: string; content: string }[] = [];
-  for (const file of folderFiles) {
+  const destFolder = destinationFolder || "lovable";
+  const destWithSlash = destFolder.endsWith("/") ? destFolder : `${destFolder}/`;
+
+  for (const file of filesToExport) {
     const content = await getFileContent(token, targetOwner, targetRepo, file.path, tBranch);
     if (content.exists && content.content) {
-      // Remove the folder prefix from the path
-      const newPath = file.path.slice(prefixWithSlash.length);
+      // Put files into destination folder, preserving structure
+      const newPath = `${destWithSlash}${file.path}`;
       filesToPush.push({ path: newPath, content: content.content });
     }
   }
 
   if (filesToPush.length === 0) {
-    throw new GitHubApiError(400, "Could not fetch any file contents from the folder");
+    throw new GitHubApiError(400, "Could not fetch any file contents");
   }
 
   // Push to source repo
@@ -524,6 +548,7 @@ async function pushFolderToSource(
     commit_sha: result.commit_sha,
     source_branch: sBranch,
     target_branch: tBranch,
+    destination_folder: destFolder,
   };
 }
 
