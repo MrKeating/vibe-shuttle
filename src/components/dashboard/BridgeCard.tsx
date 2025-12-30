@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { GitBranch, ExternalLink, Trash2, CheckCircle2, Clock, FolderTree, Layers, ChevronRight } from "lucide-react";
+import { ExternalLink, Trash2, CheckCircle2, Clock, FolderTree, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bridge } from "@/hooks/useBridges";
@@ -36,13 +36,12 @@ export const BridgeCard = ({ bridge, onDelete }: BridgeCardProps) => {
   const navigate = useNavigate();
   const createdDate = new Date(bridge.created_at).toLocaleDateString();
   const hasConfig = !!bridge.config_created_at;
-  const isFolderMode = bridge.platforms?.includes("folder-sync");
 
   const handleClick = (e: React.MouseEvent) => {
     // Don't navigate if clicking the delete button or external link
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('a')) return;
-    navigate(`/merge/${bridge.id}`);
+    navigate(`/bridge/${bridge.id}`);
   };
 
   return (
@@ -53,11 +52,7 @@ export const BridgeCard = ({ bridge, onDelete }: BridgeCardProps) => {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-            {isFolderMode ? (
-              <FolderTree className="w-5 h-5 text-primary" />
-            ) : (
-              <Layers className="w-5 h-5 text-primary" />
-            )}
+            <FolderTree className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h3 className="font-heading font-semibold text-foreground group-hover:text-primary transition-colors">
@@ -84,9 +79,9 @@ export const BridgeCard = ({ bridge, onDelete }: BridgeCardProps) => {
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete Merge</AlertDialogTitle>
+                <AlertDialogTitle>Delete Bridge</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will remove the merge record for "{bridge.repo_name}". This action cannot be undone.
+                  This will remove the bridge for "{bridge.repo_name}" and delete synced files from the target repo. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -107,18 +102,14 @@ export const BridgeCard = ({ bridge, onDelete }: BridgeCardProps) => {
       {/* Mode Badge */}
       <div className="flex flex-wrap gap-2 mb-4">
         <Badge variant="secondary" className="gap-1">
-          {isFolderMode ? (
-            <>
-              <FolderTree className="w-3 h-3" />
-              Folder Mode
-            </>
-          ) : (
-            <>
-              <Layers className="w-3 h-3" />
-              Standard Merge
-            </>
-          )}
+          <FolderTree className="w-3 h-3" />
+          Folder Sync
         </Badge>
+        {bridge.folder_prefix && (
+          <Badge variant="outline" className="font-mono text-xs">
+            /{bridge.folder_prefix}/
+          </Badge>
+        )}
       </div>
 
       {/* Status */}
@@ -127,7 +118,7 @@ export const BridgeCard = ({ bridge, onDelete }: BridgeCardProps) => {
           {hasConfig ? (
             <>
               <CheckCircle2 className="w-3 h-3 text-primary" />
-              <span>Complete</span>
+              <span>Active</span>
             </>
           ) : (
             <>

@@ -170,7 +170,7 @@ async function githubFetch(token: string, endpoint: string, options: RequestInit
       headers: {
         Authorization: authorization,
         Accept: "application/vnd.github.v3+json",
-        "User-Agent": "VibeMerge-App",
+        "User-Agent": "VibeBridge-App",
         ...options.headers,
       },
     });
@@ -281,7 +281,7 @@ async function getFile(token: string, owner: string, repo: string, path: string)
   }
 }
 
-// New functions for VibeMerge
+// Bridge functions for folder sync
 
 async function getRepoTree(token: string, owner: string, repo: string, branch?: string): Promise<FileTreeItem[]> {
   // Get default branch if not specified
