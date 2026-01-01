@@ -1,6 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, GitBranch, FolderTree, Layers, RefreshCw, Calendar, Loader2, Download, FileText, Eye, Upload, History, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  GitBranch,
+  FolderTree,
+  RefreshCw,
+  Calendar,
+  Loader2,
+  Download,
+  FileText,
+  Upload,
+  History,
+  Crown,
+  Layers,
+  ArrowRightLeft,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { UserHeader } from "@/components/dashboard/UserHeader";
@@ -25,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getPlatformById, type PlatformInfo } from "@/lib/platformDetection";
 
 interface BridgeDetail {
   id: string;
@@ -62,6 +78,13 @@ interface Branch {
   name: string;
   sha: string;
   protected: boolean;
+}
+
+interface SourceRepo {
+  name: string;
+  url?: string;
+  platform: PlatformInfo | null;
+  folderPrefix: string;
 }
 
 const BridgeDetail = () => {
