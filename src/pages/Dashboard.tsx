@@ -1,17 +1,20 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderSync, Crown, Sparkles } from "lucide-react";
+import { GitBranch, Crown, Sparkles, ArrowRightLeft, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBridges } from "@/hooks/useBridges";
+import { useAuthConnection } from "@/hooks/useAuthConnection";
 import { UserHeader } from "@/components/dashboard/UserHeader";
 import { BridgeCard } from "@/components/dashboard/BridgeCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const Dashboard = () => {
-  const { user, profile, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { profile, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { bridges, isLoading, deleteBridge, bridgeLimit } = useBridges();
+  const { connection, isLoading: connectionLoading } = useAuthConnection();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -30,6 +33,25 @@ const Dashboard = () => {
       <UserHeader />
 
       <main className="container mx-auto px-4 py-8">
+        {/* GitHub Connection Warning */}
+        {!connectionLoading && !connection && (
+          <Alert className="mb-6 border-warning/50 bg-warning/10">
+            <AlertCircle className="h-4 w-4 text-warning" />
+            <AlertTitle>GitHub Not Connected</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>Connect your GitHub account to create bridges.</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/connect-github")}
+                className="ml-4"
+              >
+                Connect GitHub
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -39,13 +61,18 @@ const Dashboard = () => {
               {bridgeLimit !== 1 ? "s" : ""} active
             </p>
           </div>
-          <Button variant="glow" className="gap-2" onClick={() => navigate("/bridge")}>
-            <FolderSync className="w-4 h-4" />
+          <Button
+            variant="glow"
+            className="gap-2"
+            onClick={() => navigate("/bridge/new")}
+            disabled={!connection}
+          >
+            <ArrowRightLeft className="w-4 h-4" />
             New Bridge
           </Button>
         </div>
 
-        {/* Upgrade Banner (for free users) */}
+        {/* Upgrade Banner */}
         {!isPaid && (
           <div className="glass p-6 rounded-xl border border-yellow-500/30 bg-yellow-500/5 mb-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -77,14 +104,19 @@ const Dashboard = () => {
         ) : bridges.length === 0 ? (
           <div className="glass p-12 rounded-2xl text-center">
             <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <FolderSync className="w-8 h-8 text-primary" />
+              <ArrowRightLeft className="w-8 h-8 text-primary" />
             </div>
             <h2 className="font-heading text-xl font-semibold mb-2">No bridges yet</h2>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Create your first bridge to sync files between two GitHub repositories.
+              Create your first bridge to sync between Lovable and AI Studio using a canonical repo.
             </p>
-            <Button variant="glow" className="gap-2" onClick={() => navigate("/bridge")}>
-              <FolderSync className="w-4 h-4" />
+            <Button
+              variant="glow"
+              className="gap-2"
+              onClick={() => navigate("/bridge/new")}
+              disabled={!connection}
+            >
+              <ArrowRightLeft className="w-4 h-4" />
               New Bridge
             </Button>
           </div>
@@ -100,25 +132,25 @@ const Dashboard = () => {
         <section className="mt-12">
           <h2 className="font-heading text-xl font-semibold mb-4 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            Quick Tips
+            How It Works
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="glass p-4 rounded-xl">
-              <h3 className="font-medium text-sm mb-1">Review conflicts carefully</h3>
+              <h3 className="font-medium text-sm mb-1">3-Repo Architecture</h3>
               <p className="text-xs text-muted-foreground">
-                Use the diff viewer to compare file versions side-by-side before choosing.
+                Canonical repo contains /lovable and /ai-studio folders as git subtrees.
               </p>
             </div>
             <div className="glass p-4 rounded-xl">
-              <h3 className="font-medium text-sm mb-1">Source vs Target</h3>
+              <h3 className="font-medium text-sm mb-1">Bidirectional Sync</h3>
               <p className="text-xs text-muted-foreground">
-                Source files get synced into a folder in the target repo. Plan accordingly.
+                Changes flow both ways via PRs. Never force-push, always review.
               </p>
             </div>
             <div className="glass p-4 rounded-xl">
-              <h3 className="font-medium text-sm mb-1">Create backups</h3>
+              <h3 className="font-medium text-sm mb-1">Ownership Boundaries</h3>
               <p className="text-xs text-muted-foreground">
-                When pushing to existing repos, consider creating a backup branch first.
+                Lovable owns /lovable/**, AI Studio owns /ai-studio/**. No conflicts.
               </p>
             </div>
           </div>

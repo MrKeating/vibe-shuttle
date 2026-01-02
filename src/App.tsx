@@ -6,9 +6,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
-import Bridge from "./pages/Bridge";
+import CreateBridge from "./pages/CreateBridge";
 import BridgeDetail from "./pages/BridgeDetail";
-import ViewProject from "./pages/ViewProject";
+import ConnectGitHub from "./pages/ConnectGitHub";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -25,10 +25,9 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/bridge" element={<Bridge />} />
+            <Route path="/bridge/new" element={<CreateBridge />} />
             <Route path="/bridge/:id" element={<BridgeDetail />} />
-            <Route path="/view-project" element={<ViewProject />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/connect-github" element={<ConnectGitHub />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

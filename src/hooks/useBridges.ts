@@ -4,17 +4,45 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface Bridge {
   id: string;
-  github_repo_url: string;
-  repo_name: string;
-  platforms: string[];
-  status: string;
+  user_id: string;
+  auth_connection_id: string | null;
+  name: string;
+  // Canonical repo (source of truth)
+  canonical_repo: string;
+  canonical_branch: string;
+  // Lovable platform repo
+  lovable_repo: string;
+  lovable_branch: string;
+  lovable_prefix: string;
+  // AI Studio platform repo
+  aistudio_repo: string;
+  aistudio_branch: string;
+  aistudio_prefix: string;
+  // Settings
+  squash_policy: boolean;
+  auto_merge: boolean;
+  setup_complete: boolean;
+  setup_pr_url: string | null;
+  // Timestamps
   created_at: string;
   updated_at: string;
-  config_created_at: string | null;
-  source_repo_url: string | null;
-  source_repo_name: string | null;
-  merge_mode: string | null;
-  folder_prefix: string | null;
+}
+
+export interface SyncRun {
+  id: string;
+  bridge_id: string;
+  direction: "SETUP" | "INBOUND" | "OUTBOUND";
+  source_repo: string;
+  dest_repo: string;
+  trigger_commit_sha: string | null;
+  status: "queued" | "running" | "success" | "conflict" | "error";
+  pr_url: string | null;
+  pr_number: number | null;
+  log_excerpt: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
 }
 
 export const useBridges = () => {
@@ -37,7 +65,7 @@ export const useBridges = () => {
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setBridges(data);
+      setBridges(data as Bridge[]);
     }
     setIsLoading(false);
   };
@@ -47,13 +75,18 @@ export const useBridges = () => {
   }, [user]);
 
   const createBridge = async (data: {
-    github_repo_url: string;
-    repo_name: string;
-    platforms: string[];
-    source_repo_url?: string;
-    source_repo_name?: string;
-    merge_mode?: string;
-    folder_prefix?: string;
+    name: string;
+    canonical_repo: string;
+    canonical_branch?: string;
+    lovable_repo: string;
+    lovable_branch?: string;
+    lovable_prefix?: string;
+    aistudio_repo: string;
+    aistudio_branch?: string;
+    aistudio_prefix?: string;
+    squash_policy?: boolean;
+    auto_merge?: boolean;
+    auth_connection_id?: string;
   }) => {
     if (!user) throw new Error("Not authenticated");
 
@@ -61,63 +94,60 @@ export const useBridges = () => {
       .from("bridges")
       .insert({
         user_id: user.id,
-        github_repo_url: data.github_repo_url,
-        repo_name: data.repo_name,
-        platforms: data.platforms,
-        config_created_at: new Date().toISOString(),
-        source_repo_url: data.source_repo_url || null,
-        source_repo_name: data.source_repo_name || null,
-        merge_mode: data.merge_mode || "standard",
-        folder_prefix: data.folder_prefix || null,
+        auth_connection_id: data.auth_connection_id || null,
+        name: data.name,
+        canonical_repo: data.canonical_repo,
+        canonical_branch: data.canonical_branch || "main",
+        lovable_repo: data.lovable_repo,
+        lovable_branch: data.lovable_branch || "main",
+        lovable_prefix: data.lovable_prefix || "lovable",
+        aistudio_repo: data.aistudio_repo,
+        aistudio_branch: data.aistudio_branch || "main",
+        aistudio_prefix: data.aistudio_prefix || "ai-studio",
+        squash_policy: data.squash_policy ?? true,
+        auto_merge: data.auto_merge ?? false,
       })
       .select()
       .single();
 
     if (error) throw error;
-    
-    setBridges((prev) => [newBridge, ...prev]);
-    return newBridge;
+
+    setBridges((prev) => [newBridge as Bridge, ...prev]);
+    return newBridge as Bridge;
+  };
+
+  const updateBridge = async (id: string, updates: Partial<Bridge>) => {
+    const { data, error } = await supabase
+      .from("bridges")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setBridges((prev) =>
+      prev.map((b) => (b.id === id ? (data as Bridge) : b))
+    );
+    return data as Bridge;
   };
 
   const deleteBridge = async (id: string) => {
-    // Find the bridge to get folder info
-    const bridge = bridges.find((b) => b.id === id);
-    
-    // If this is a folder-mode bridge with a folder_prefix, delete the folder files first
-    if (bridge?.folder_prefix && bridge?.github_repo_url) {
-      try {
-        // Extract owner/repo from github_repo_url
-        const match = bridge.github_repo_url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-        if (match) {
-          const [, owner, repo] = match;
-          const repoName = repo.replace(/\.git$/, "");
-          
-          console.log("Deleting folder from repo:", { owner, repo: repoName, folder: bridge.folder_prefix });
-          
-          const { error: deleteError } = await supabase.functions.invoke("github-api", {
-            body: {
-              action: "delete-folder",
-              owner,
-              repo: repoName,
-              folderPrefix: bridge.folder_prefix,
-              message: `VibeBridge: remove synced folder /${bridge.folder_prefix}/`,
-            },
-          });
-          
-          if (deleteError) {
-            console.error("Failed to delete folder:", deleteError);
-            // Continue with bridge deletion even if folder deletion fails
-          }
-        }
-      } catch (error) {
-        console.error("Error deleting folder:", error);
-        // Continue with bridge deletion even if folder deletion fails
-      }
-    }
-    
     const { error } = await supabase.from("bridges").delete().eq("id", id);
     if (error) throw error;
     setBridges((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const getSyncRuns = async (bridgeId: string): Promise<SyncRun[]> => {
+    const { data, error } = await supabase
+      .from("sync_runs")
+      .select("*")
+      .eq("bridge_id", bridgeId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+    return (data || []) as SyncRun[];
   };
 
   const canCreateBridge = profile?.is_paid || bridges.length < 1;
@@ -126,7 +156,10 @@ export const useBridges = () => {
     bridges,
     isLoading,
     createBridge,
+    updateBridge,
     deleteBridge,
+    getSyncRuns,
+    refreshBridges: fetchBridges,
     canCreateBridge,
     bridgeLimit: profile?.is_paid ? Infinity : 1,
   };
