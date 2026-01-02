@@ -14,53 +14,112 @@ export type Database = {
   }
   public: {
     Tables: {
-      bridges: {
+      auth_connections: {
         Row: {
-          config_created_at: string | null
+          avatar_url: string | null
           created_at: string
-          folder_prefix: string | null
-          github_repo_url: string
+          encrypted_pat: string | null
+          github_installation_id: number | null
+          github_username: string | null
           id: string
-          merge_mode: string | null
-          platforms: string[]
-          repo_name: string
-          source_repo_name: string | null
-          source_repo_url: string | null
-          status: string
+          type: string
           updated_at: string
           user_id: string
         }
         Insert: {
-          config_created_at?: string | null
+          avatar_url?: string | null
           created_at?: string
-          folder_prefix?: string | null
-          github_repo_url: string
+          encrypted_pat?: string | null
+          github_installation_id?: number | null
+          github_username?: string | null
           id?: string
-          merge_mode?: string | null
-          platforms?: string[]
-          repo_name: string
-          source_repo_name?: string | null
-          source_repo_url?: string | null
-          status?: string
+          type: string
           updated_at?: string
           user_id: string
         }
         Update: {
-          config_created_at?: string | null
+          avatar_url?: string | null
           created_at?: string
-          folder_prefix?: string | null
-          github_repo_url?: string
+          encrypted_pat?: string | null
+          github_installation_id?: number | null
+          github_username?: string | null
           id?: string
-          merge_mode?: string | null
-          platforms?: string[]
-          repo_name?: string
-          source_repo_name?: string | null
-          source_repo_url?: string | null
-          status?: string
+          type?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      bridges: {
+        Row: {
+          aistudio_branch: string
+          aistudio_prefix: string
+          aistudio_repo: string
+          auth_connection_id: string | null
+          auto_merge: boolean
+          canonical_branch: string
+          canonical_repo: string
+          created_at: string
+          id: string
+          lovable_branch: string
+          lovable_prefix: string
+          lovable_repo: string
+          name: string
+          setup_complete: boolean
+          setup_pr_url: string | null
+          squash_policy: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aistudio_branch?: string
+          aistudio_prefix?: string
+          aistudio_repo: string
+          auth_connection_id?: string | null
+          auto_merge?: boolean
+          canonical_branch?: string
+          canonical_repo: string
+          created_at?: string
+          id?: string
+          lovable_branch?: string
+          lovable_prefix?: string
+          lovable_repo: string
+          name: string
+          setup_complete?: boolean
+          setup_pr_url?: string | null
+          squash_policy?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aistudio_branch?: string
+          aistudio_prefix?: string
+          aistudio_repo?: string
+          auth_connection_id?: string | null
+          auto_merge?: boolean
+          canonical_branch?: string
+          canonical_repo?: string
+          created_at?: string
+          id?: string
+          lovable_branch?: string
+          lovable_prefix?: string
+          lovable_repo?: string
+          name?: string
+          setup_complete?: boolean
+          setup_pr_url?: string | null
+          squash_policy?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bridges_auth_connection_id_fkey"
+            columns: ["auth_connection_id"]
+            isOneToOne: false
+            referencedRelation: "auth_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -95,52 +154,131 @@ export type Database = {
         }
         Relationships: []
       }
-      sync_history: {
+      repo_state: {
         Row: {
           bridge_id: string
-          commit_message: string | null
-          commit_sha: string | null
-          created_at: string
-          error_message: string | null
-          files_count: number
           id: string
-          operation: string
-          source_branch: string | null
+          last_processed_sha: string | null
+          repo: string
+          updated_at: string
+        }
+        Insert: {
+          bridge_id: string
+          id?: string
+          last_processed_sha?: string | null
+          repo: string
+          updated_at?: string
+        }
+        Update: {
+          bridge_id?: string
+          id?: string
+          last_processed_sha?: string | null
+          repo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repo_state_bridge_id_fkey"
+            columns: ["bridge_id"]
+            isOneToOne: false
+            referencedRelation: "bridges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_runs: {
+        Row: {
+          bridge_id: string
+          created_at: string
+          dest_repo: string
+          direction: string
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          log_excerpt: string | null
+          pr_number: number | null
+          pr_url: string | null
+          source_repo: string
+          started_at: string | null
           status: string
-          target_branch: string | null
+          trigger_commit_sha: string | null
           user_id: string
         }
         Insert: {
           bridge_id: string
-          commit_message?: string | null
-          commit_sha?: string | null
           created_at?: string
+          dest_repo: string
+          direction: string
           error_message?: string | null
-          files_count?: number
+          finished_at?: string | null
           id?: string
-          operation: string
-          source_branch?: string | null
+          log_excerpt?: string | null
+          pr_number?: number | null
+          pr_url?: string | null
+          source_repo: string
+          started_at?: string | null
           status?: string
-          target_branch?: string | null
+          trigger_commit_sha?: string | null
           user_id: string
         }
         Update: {
           bridge_id?: string
-          commit_message?: string | null
-          commit_sha?: string | null
           created_at?: string
+          dest_repo?: string
+          direction?: string
           error_message?: string | null
-          files_count?: number
+          finished_at?: string | null
           id?: string
-          operation?: string
-          source_branch?: string | null
+          log_excerpt?: string | null
+          pr_number?: number | null
+          pr_url?: string | null
+          source_repo?: string
+          started_at?: string | null
           status?: string
-          target_branch?: string | null
+          trigger_commit_sha?: string | null
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "sync_history_bridge_id_fkey"
+            foreignKeyName: "sync_runs_bridge_id_fkey"
+            columns: ["bridge_id"]
+            isOneToOne: false
+            referencedRelation: "bridges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhook_deliveries: {
+        Row: {
+          bridge_id: string | null
+          delivery_id: string
+          event_type: string
+          id: string
+          processed: boolean
+          received_at: string
+          repo: string
+        }
+        Insert: {
+          bridge_id?: string | null
+          delivery_id: string
+          event_type: string
+          id?: string
+          processed?: boolean
+          received_at?: string
+          repo: string
+        }
+        Update: {
+          bridge_id?: string | null
+          delivery_id?: string
+          event_type?: string
+          id?: string
+          processed?: boolean
+          received_at?: string
+          repo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_deliveries_bridge_id_fkey"
             columns: ["bridge_id"]
             isOneToOne: false
             referencedRelation: "bridges"

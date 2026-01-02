@@ -1,20 +1,19 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ExternalLink,
   GitBranch,
-  FolderTree,
   RefreshCw,
-  Calendar,
   Loader2,
-  Download,
-  FileText,
-  Upload,
-  History,
-  Crown,
-  Layers,
-  ArrowRightLeft,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Settings2,
+  Play,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,101 +21,36 @@ import { UserHeader } from "@/components/dashboard/UserHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMerge, FileTreeItem } from "@/hooks/useMerge";
 import { useToast } from "@/hooks/use-toast";
+import { Bridge, SyncRun, useBridges } from "@/hooks/useBridges";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { getPlatformById, type PlatformInfo } from "@/lib/platformDetection";
-
-interface BridgeDetail {
-  id: string;
-  github_repo_url: string;
-  repo_name: string;
-  platforms: string[];
-  status: string;
-  created_at: string;
-  updated_at: string;
-  config_created_at: string | null;
-  source_repo_url: string | null;
-  source_repo_name: string | null;
-  merge_mode: string | null;
-  folder_prefix: string | null;
-}
-
-interface PreviewFile {
-  path: string;
-  targetPath: string;
-  size?: number;
-}
-
-interface SyncHistoryEntry {
-  id: string;
-  operation: "pull" | "push";
-  source_branch: string;
-  target_branch: string;
-  files_count: number;
-  commit_sha: string | null;
-  status: string;
-  created_at: string;
-}
-
-interface Branch {
-  name: string;
-  sha: string;
-  protected: boolean;
-}
-
-interface SourceRepo {
-  name: string;
-  url?: string;
-  platform: PlatformInfo | null;
-  folderPrefix: string;
-}
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const BridgeDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const [bridge, setBridge] = useState<BridgeDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPulling, setIsPulling] = useState(false);
-  const [isPushing, setIsPushing] = useState(false);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [showPushPreview, setShowPushPreview] = useState(false);
-  const [previewFiles, setPreviewFiles] = useState<PreviewFile[]>([]);
-  const [pushPreviewFiles, setPushPreviewFiles] = useState<PreviewFile[]>([]);
-  const { getRepoTree, getFileContent } = useMerge();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { getSyncRuns, updateBridge } = useBridges();
   const { toast } = useToast();
 
-  // Branch state
-  const [sourceBranches, setSourceBranches] = useState<Branch[]>([]);
-  const [targetBranches, setTargetBranches] = useState<Branch[]>([]);
-  const [selectedSourceBranch, setSelectedSourceBranch] = useState<string>("main");
-  const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>("main");
-  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
-
-  // Sync history
-  const [syncHistory, setSyncHistory] = useState<SyncHistoryEntry[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-
-  // Export folders selection
-  const [selectedExportFolders, setSelectedExportFolders] = useState<string[]>(["src/components", "src/pages"]);
-  const [destinationFolder, setDestinationFolder] = useState<string>("lovable");
+  const [bridge, setBridge] = useState<Bridge | null>(null);
+  const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingRuns, setIsLoadingRuns] = useState(false);
+  const [isRunningSync, setIsRunningSync] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -127,7 +61,7 @@ const BridgeDetail = () => {
   useEffect(() => {
     const fetchBridge = async () => {
       if (!id) return;
-      
+
       const { data, error } = await supabase
         .from("bridges")
         .select("*")
@@ -139,7 +73,7 @@ const BridgeDetail = () => {
         return;
       }
 
-      setBridge(data as BridgeDetail);
+      setBridge(data as Bridge);
       setIsLoading(false);
     };
 
@@ -148,865 +82,450 @@ const BridgeDetail = () => {
     }
   }, [id, isAuthenticated, navigate]);
 
-  // Fetch branches when bridge is loaded
   useEffect(() => {
-    if (!bridge) return;
-    fetchBranches();
-    fetchSyncHistory();
+    const fetchRuns = async () => {
+      if (!bridge) return;
+      setIsLoadingRuns(true);
+      try {
+        const runs = await getSyncRuns(bridge.id);
+        setSyncRuns(runs);
+      } catch (error) {
+        console.error("Failed to fetch sync runs:", error);
+      } finally {
+        setIsLoadingRuns(false);
+      }
+    };
+    fetchRuns();
   }, [bridge]);
 
-  const getRepoInfo = (url: string) => {
-    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-    if (!match) return null;
-    return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
-  };
+  const getGitHubUrl = (repo: string) => `https://github.com/${repo}`;
 
-  const fetchBranches = async () => {
-    if (!bridge) return;
-    setIsLoadingBranches(true);
-
-    try {
-      // Fetch source repo branches
-      if (bridge.source_repo_url) {
-        const sourceInfo = getRepoInfo(bridge.source_repo_url);
-        if (sourceInfo) {
-          const { data } = await supabase.functions.invoke("github-api", {
-            body: { action: "get-branches", owner: sourceInfo.owner, repo: sourceInfo.repo },
-          });
-          if (data && Array.isArray(data)) {
-            setSourceBranches(data);
-            if (data.length > 0 && !data.find((b: Branch) => b.name === selectedSourceBranch)) {
-              setSelectedSourceBranch(data[0].name);
-            }
-          }
-        }
-      }
-
-      // Fetch target repo branches
-      const targetInfo = getRepoInfo(bridge.github_repo_url);
-      if (targetInfo) {
-        const { data } = await supabase.functions.invoke("github-api", {
-          body: { action: "get-branches", owner: targetInfo.owner, repo: targetInfo.repo },
-        });
-        if (data && Array.isArray(data)) {
-          setTargetBranches(data);
-          if (data.length > 0 && !data.find((b: Branch) => b.name === selectedTargetBranch)) {
-            setSelectedTargetBranch(data[0].name);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching branches:", error);
-    } finally {
-      setIsLoadingBranches(false);
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "success":
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      case "error":
+        return <XCircle className="w-4 h-4 text-destructive" />;
+      case "conflict":
+        return <AlertTriangle className="w-4 h-4 text-warning" />;
+      case "running":
+        return <Loader2 className="w-4 h-4 text-primary animate-spin" />;
+      default:
+        return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
-  const fetchSyncHistory = async () => {
-    if (!bridge) return;
-    setIsLoadingHistory(true);
-
-    try {
-      const { data, error } = await supabase
-        .from("sync_history")
-        .select("*")
-        .eq("bridge_id", bridge.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      if (!error && data) {
-        setSyncHistory(data as SyncHistoryEntry[]);
-      }
-    } catch (error) {
-      console.error("Error fetching sync history:", error);
-    } finally {
-      setIsLoadingHistory(false);
-    }
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+      success: "default",
+      error: "destructive",
+      conflict: "outline",
+      running: "secondary",
+      queued: "secondary",
+    };
+    return (
+      <Badge variant={variants[status] || "secondary"} className="capitalize">
+        {status}
+      </Badge>
+    );
   };
 
-  const logSyncOperation = async (
-    operation: "pull" | "push",
-    filesCount: number,
-    commitSha: string | null,
-    status: "success" | "failed",
-    errorMessage?: string
-  ) => {
+  const handleTriggerSync = async (direction: "INBOUND" | "OUTBOUND", platform: "lovable" | "aistudio") => {
     if (!bridge || !user) return;
 
+    const syncKey = `${direction}-${platform}`;
+    setIsRunningSync(syncKey);
+
     try {
-      await supabase.from("sync_history").insert({
-        bridge_id: bridge.id,
-        user_id: user.id,
-        operation,
-        source_branch: selectedSourceBranch,
-        target_branch: selectedTargetBranch,
-        files_count: filesCount,
-        commit_sha: commitSha,
-        commit_message: operation === "pull" 
-          ? `Pull from source into /${bridge.folder_prefix || "src/ai-studio"}/`
-          : `Push from /${bridge.folder_prefix || "src/ai-studio"}/ to source`,
-        status,
-        error_message: errorMessage,
-      });
-      
-      fetchSyncHistory();
-    } catch (error) {
-      console.error("Error logging sync operation:", error);
-    }
-  };
+      // Create a sync run record
+      const sourceRepo = direction === "INBOUND"
+        ? (platform === "lovable" ? bridge.lovable_repo : bridge.aistudio_repo)
+        : bridge.canonical_repo;
+      const destRepo = direction === "INBOUND"
+        ? bridge.canonical_repo
+        : (platform === "lovable" ? bridge.lovable_repo : bridge.aistudio_repo);
 
-  const handlePreviewPull = async () => {
-    if (!bridge?.source_repo_url) return;
+      const { data: syncRun, error } = await supabase
+        .from("sync_runs")
+        .insert({
+          bridge_id: bridge.id,
+          user_id: user.id,
+          direction,
+          source_repo: sourceRepo,
+          dest_repo: destRepo,
+          status: "queued",
+        })
+        .select()
+        .single();
 
-    setIsLoadingPreview(true);
-    try {
-      const sourceInfo = getRepoInfo(bridge.source_repo_url);
-      if (!sourceInfo) throw new Error("Invalid source repo URL");
+      if (error) throw error;
 
-      const folderPrefix = bridge.folder_prefix || "src/ai-studio";
-
-      const sourceTree = await getRepoTree(sourceInfo.owner, sourceInfo.repo, selectedSourceBranch);
-      const sourceFiles = sourceTree.filter((f) => f.type === "blob");
-
-      if (sourceFiles.length === 0) {
-        toast({
-          title: "No Files",
-          description: "Source repository is empty.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const files: PreviewFile[] = sourceFiles.map((f) => ({
-        path: f.path,
-        targetPath: folderPrefix ? `${folderPrefix}/${f.path}` : f.path,
-        size: f.size,
-      }));
-
-      setPreviewFiles(files);
-      setShowPreview(true);
-    } catch (error: any) {
+      // In a real implementation, this would trigger an edge function
+      // For now, we'll simulate the sync process
       toast({
-        title: "Preview Failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Sync Triggered",
+        description: `${direction} sync for ${platform} has been queued.`,
       });
-    } finally {
-      setIsLoadingPreview(false);
-    }
-  };
 
-  const handlePreviewPush = async () => {
-    if (!bridge?.source_repo_url) return;
-
-    setIsLoadingPreview(true);
-    try {
-      const targetInfo = getRepoInfo(bridge.github_repo_url);
-      if (!targetInfo) throw new Error("Invalid target repo URL");
-
-      const targetTree = await getRepoTree(targetInfo.owner, targetInfo.repo, selectedTargetBranch);
-      
-      // Filter files from selected export folders
-      let matchingFiles: PreviewFile[] = [];
-      for (const folder of selectedExportFolders) {
-        const folderWithSlash = folder.endsWith("/") ? folder : `${folder}/`;
-        const folderFiles = targetTree
-          .filter((f) => f.type === "blob" && f.path.startsWith(folderWithSlash))
-          .map((f) => ({
-            path: f.path,
-            targetPath: `${destinationFolder}/${f.path}`,
-            size: f.size,
-          }));
-        matchingFiles.push(...folderFiles);
-      }
-
-      if (matchingFiles.length === 0) {
-        toast({
-          title: "No Files",
-          description: `No files found in selected folders.`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setPushPreviewFiles(matchingFiles);
-      setShowPushPreview(true);
+      // Refresh sync runs
+      const runs = await getSyncRuns(bridge.id);
+      setSyncRuns(runs);
     } catch (error: any) {
-      toast({
-        title: "Preview Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingPreview(false);
-    }
-  };
-
-  // Generate auto-export content for ai-studio/index.ts based on synced files
-  const generateAutoExports = (files: { path: string; content: string }[]): string => {
-    const exportLines: string[] = [
-      `/**`,
-      ` * AI Studio Bridge - Auto-Generated Exports`,
-      ` * `,
-      ` * This file is automatically generated after each sync from AI Studio.`,
-      ` * It exports all TypeScript/JavaScript modules synced via git subtree.`,
-      ` * `,
-      ` * Usage in app code:`,
-      ` *   import { Something } from "@/ai";`,
-      ` *   import { specific } from "@ai/specific-module";`,
-      ` * `,
-      ` * GENERATED: ${new Date().toISOString()}`,
-      ` */`,
-      ``,
-      `// Version constant for tracking`,
-      `export const AI_STUDIO_VERSION = "1.0.0";`,
-      `export const AI_STUDIO_SYNCED_AT = "${new Date().toISOString()}";`,
-      ``,
-      `// ============================================`,
-      `// AUTO-GENERATED EXPORTS FROM AI STUDIO SYNC`,
-      `// ============================================`,
-      ``,
-    ];
-
-    // Find all TypeScript/JavaScript files and generate exports
-    const exportableFiles = files.filter(f => {
-      const path = f.path;
-      // Only export from direct children, not nested too deep
-      const relativePath = path.replace(/^src\/ai-studio\//, '');
-      // Skip index.ts itself
-      if (relativePath === 'index.ts') return false;
-      // Only .ts, .tsx, .js, .jsx files
-      if (!/\.(tsx?|jsx?)$/.test(path)) return false;
-      // Skip test files
-      if (/\.(test|spec)\.(tsx?|jsx?)$/.test(path)) return false;
-      return true;
-    });
-
-    for (const file of exportableFiles) {
-      const relativePath = file.path.replace(/^src\/ai-studio\//, '');
-      const modulePath = './' + relativePath.replace(/\.(tsx?|jsx?)$/, '');
-      
-      // Add a try-export comment so developers know which modules are available
-      exportLines.push(`// Synced: ${relativePath}`);
-      exportLines.push(`export * from "${modulePath}";`);
-      exportLines.push(``);
-    }
-
-    if (exportableFiles.length === 0) {
-      exportLines.push(`// No exportable modules found in this sync.`);
-      exportLines.push(`// Add .ts/.tsx/.js/.jsx files to AI Studio to auto-export them.`);
-    }
-
-    return exportLines.join('\n');
-  };
-
-  const handleConfirmPull = async () => {
-    if (!bridge?.source_repo_url || !bridge?.github_repo_url) return;
-
-    setShowPreview(false);
-    setIsPulling(true);
-    try {
-      const sourceInfo = getRepoInfo(bridge.source_repo_url);
-      const targetInfo = getRepoInfo(bridge.github_repo_url);
-      if (!sourceInfo || !targetInfo) throw new Error("Invalid repo URLs");
-
-      const folderPrefix = bridge.folder_prefix || "src/ai-studio";
-
-      // Fetch all file contents
-      const filesToPush: { path: string; content: string }[] = [];
-      for (const file of previewFiles) {
-        const result = await getFileContent(sourceInfo.owner, sourceInfo.repo, file.path, selectedSourceBranch);
-        if (result.exists && result.content) {
-          filesToPush.push({
-            path: file.targetPath,
-            content: result.content,
-          });
-        }
-      }
-
-      if (filesToPush.length === 0) {
-        toast({
-          title: "No Content",
-          description: "Could not fetch any file contents from source.",
-          variant: "destructive",
-        });
-        await logSyncOperation("pull", 0, null, "failed", "No content fetched");
-        return;
-      }
-
-      // Auto-generate index.ts with exports for all synced modules
-      const indexPath = `${folderPrefix}/index.ts`;
-      const autoExportContent = generateAutoExports(filesToPush);
-      
-      // Check if index.ts is already in files, replace it; otherwise add it
-      const indexFileIdx = filesToPush.findIndex(f => f.path === indexPath);
-      if (indexFileIdx >= 0) {
-        // Prepend auto-exports to existing index content
-        filesToPush[indexFileIdx].content = autoExportContent + '\n\n// === ORIGINAL INDEX CONTENT ===\n' + filesToPush[indexFileIdx].content;
-      } else {
-        filesToPush.push({
-          path: indexPath,
-          content: autoExportContent,
-        });
-      }
-
-      // Build commit message that signals external tool usage
-      const commitMessage = `[AI-STUDIO-SYNC] git subtree pull: ${sourceInfo.owner}/${sourceInfo.repo}:${selectedSourceBranch} → /${folderPrefix}/
-
-This commit contains code generated by an external AI tool (Google AI Studio).
-Lovable should use the synced modules from @ai/* or @/ai imports.
-
-Synced ${filesToPush.length} files at ${new Date().toISOString()}`;
-
-      // Push to target repo
-      const { data, error } = await supabase.functions.invoke("github-api", {
-        body: {
-          action: "push-files",
-          owner: targetInfo.owner,
-          repo: targetInfo.repo,
-          files: filesToPush,
-          message: commitMessage,
-          branch: selectedTargetBranch,
-        },
-      });
-
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-
-      // Update bridge timestamp
-      await supabase
-        .from("bridges")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", bridge.id);
-
-      setBridge({ ...bridge, updated_at: new Date().toISOString() });
-
-      await logSyncOperation("pull", filesToPush.length, data?.commit_sha, "success");
-
-      toast({
-        title: "Pull Complete",
-        description: `Synced ${filesToPush.length} files into /${folderPrefix}/ with auto-exports`,
-      });
-    } catch (error: any) {
-      await logSyncOperation("pull", 0, null, "failed", error.message);
       toast({
         title: "Sync Failed",
         description: error.message,
         variant: "destructive",
       });
     } finally {
-      setIsPulling(false);
+      setIsRunningSync(null);
     }
   };
 
-  const handleConfirmPush = async () => {
-    if (!bridge?.source_repo_url || !bridge?.github_repo_url) return;
+  const handleTriggerSetup = async () => {
+    if (!bridge || !user) return;
 
-    setShowPushPreview(false);
-    setIsPushing(true);
+    setIsRunningSync("SETUP");
+
     try {
-      const sourceInfo = getRepoInfo(bridge.source_repo_url);
-      const targetInfo = getRepoInfo(bridge.github_repo_url);
-      if (!sourceInfo || !targetInfo) throw new Error("Invalid repo URLs");
+      const { error } = await supabase
+        .from("sync_runs")
+        .insert({
+          bridge_id: bridge.id,
+          user_id: user.id,
+          direction: "SETUP",
+          source_repo: bridge.canonical_repo,
+          dest_repo: bridge.canonical_repo,
+          status: "queued",
+        });
 
-      const { data, error } = await supabase.functions.invoke("github-api", {
-        body: {
-          action: "push-folder-to-source",
-          sourceOwner: sourceInfo.owner,
-          sourceRepo: sourceInfo.repo,
-          targetOwner: targetInfo.owner,
-          targetRepo: targetInfo.repo,
-          folderPrefix: bridge.folder_prefix || "src/ai-studio",
-          message: `VibeBridge: export to /${destinationFolder}/ from Lovable`,
-          sourceBranch: selectedSourceBranch,
-          targetBranch: selectedTargetBranch,
-          exportFolders: selectedExportFolders,
-          destinationFolder: destinationFolder,
-        },
-      });
-
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-
-      await logSyncOperation("push", data?.files_count || pushPreviewFiles.length, data?.commit_sha, "success");
+      if (error) throw error;
 
       toast({
-        title: "Export Complete",
-        description: `Exported ${data?.files_count || pushPreviewFiles.length} files to ${sourceInfo.owner}/${sourceInfo.repo}/${destinationFolder}/`,
+        title: "Setup Triggered",
+        description: "Subtree initialization has been queued. A PR will be created in your canonical repo.",
       });
+
+      const runs = await getSyncRuns(bridge.id);
+      setSyncRuns(runs);
     } catch (error: any) {
-      await logSyncOperation("push", 0, null, "failed", error.message);
       toast({
-        title: "Export Failed",
+        title: "Setup Failed",
         description: error.message,
         variant: "destructive",
       });
     } finally {
-      setIsPushing(false);
+      setIsRunningSync(null);
     }
   };
 
-  if (authLoading || !isAuthenticated) {
-    return null;
+  if (authLoading || isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <UserHeader />
+        <main className="container mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-48 mb-4" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </main>
+      </div>
+    );
   }
 
-  const canPull = bridge?.source_repo_url;
-  const canPush = bridge?.source_repo_url && selectedExportFolders.length > 0;
-
-  const toggleExportFolder = (folder: string) => {
-    setSelectedExportFolders((prev) =>
-      prev.includes(folder)
-        ? prev.filter((f) => f !== folder)
-        : [...prev, folder]
-    );
-  };
-
-  const availableExportFolders = [
-    { id: "src/components", label: "Components", description: "src/components/" },
-    { id: "src/pages", label: "Pages", description: "src/pages/" },
-    { id: "src/hooks", label: "Hooks", description: "src/hooks/" },
-    { id: "src/lib", label: "Utilities", description: "src/lib/" },
-    { id: "src/contexts", label: "Contexts", description: "src/contexts/" },
-  ];
-
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  if (!bridge) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <UserHeader />
 
       <main className="container mx-auto px-4 py-8">
+        {/* Back Button */}
+        <Button variant="ghost" className="mb-6" onClick={() => navigate("/dashboard")}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Dashboard
+        </Button>
+
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Dashboard
-          </Button>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="font-heading text-3xl font-bold mb-1">{bridge.name}</h1>
+            <p className="text-muted-foreground flex items-center gap-2">
+              <GitBranch className="w-4 h-4" />
+              {bridge.canonical_branch}
+              {!bridge.setup_complete && (
+                <Badge variant="outline" className="text-warning border-warning/50">
+                  Setup Pending
+                </Badge>
+              )}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm">
+              <Settings2 className="w-4 h-4 mr-2" />
+              Settings
+            </Button>
+          </div>
         </div>
 
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-12 w-1/3" />
-            <Skeleton className="h-64 rounded-xl" />
-          </div>
-        ) : bridge ? (
-          <div className="space-y-8">
-            {/* Title Section */}
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
-                <FolderTree className="w-7 h-7 text-primary" />
-              </div>
-              <div>
-                <h1 className="font-heading text-3xl font-bold mb-1">{bridge.repo_name}</h1>
-                <p className="text-muted-foreground">
-                  Folder Sync (git subtree)
-                </p>
-              </div>
-            </div>
-
-            {/* Branch Selection */}
-            {canPull && (
-              <div className="glass p-6 rounded-xl border border-border">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <GitBranch className="w-5 h-5 text-primary" />
-                  Branch Selection
-                </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-muted-foreground mb-2 block">Source Branch (AI Studio)</label>
-                    <Select value={selectedSourceBranch} onValueChange={setSelectedSourceBranch} disabled={isLoadingBranches}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sourceBranches.map((branch) => (
-                          <SelectItem key={branch.name} value={branch.name}>
-                            {branch.name} {branch.protected && "(protected)"}
-                          </SelectItem>
-                        ))}
-                        {sourceBranches.length === 0 && (
-                          <SelectItem value="main">main</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground mb-2 block">Target Branch (Lovable)</label>
-                    <Select value={selectedTargetBranch} onValueChange={setSelectedTargetBranch} disabled={isLoadingBranches}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {targetBranches.map((branch) => (
-                          <SelectItem key={branch.name} value={branch.name}>
-                            {branch.name} {branch.protected && "(protected)"}
-                          </SelectItem>
-                        ))}
-                        {targetBranches.length === 0 && (
-                          <SelectItem value="main">main</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Repository Cards */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Source Repository */}
-              {bridge.source_repo_url && (
-                <div className="glass p-6 rounded-xl border border-border">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                      <GitBranch className="w-5 h-5 text-yellow-500" />
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground uppercase tracking-wide">Source Repository</span>
-                      <h3 className="font-semibold">{bridge.source_repo_name || "AI Studio Export"}</h3>
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Files from this repo are synced into the target's subfolder.
-                  </p>
-                  <a
-                    href={bridge.source_repo_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-                  >
-                    View on GitHub
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              )}
-
-              {/* Target / Merged Repository */}
-              <div className="glass p-6 rounded-xl border border-primary/30">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                    <GitBranch className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                      Target (Canonical) Repository
-                    </span>
-                    <h3 className="font-semibold">{bridge.repo_name}</h3>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  This is your main repo. Source files live in <code className="text-primary">/{bridge.folder_prefix || "src/ai-studio"}/</code>
-                </p>
+        {/* Setup Banner */}
+        {!bridge.setup_complete && (
+          <Card className="mb-6 border-warning/50 bg-warning/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-warning">
+                <AlertTriangle className="w-5 h-5" />
+                Setup Required
+              </CardTitle>
+              <CardDescription>
+                Initialize git subtrees in your canonical repo to start syncing.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                This will create a PR in <strong>{bridge.canonical_repo}</strong> that adds:
+              </p>
+              <ul className="text-sm text-muted-foreground mb-4 space-y-1">
+                <li>• <code className="bg-secondary px-1 rounded">/{bridge.lovable_prefix}/</code> ← subtree from {bridge.lovable_repo}</li>
+                <li>• <code className="bg-secondary px-1 rounded">/{bridge.aistudio_prefix}/</code> ← subtree from {bridge.aistudio_repo}</li>
+              </ul>
+              <Button
+                onClick={handleTriggerSetup}
+                disabled={isRunningSync === "SETUP"}
+              >
+                {isRunningSync === "SETUP" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating Setup PR...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    Create Setup PR
+                  </>
+                )}
+              </Button>
+              {bridge.setup_pr_url && (
                 <a
-                  href={bridge.github_repo_url}
+                  href={bridge.setup_pr_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                  className="ml-4 text-sm text-primary hover:underline"
                 >
-                  View on GitHub
-                  <ExternalLink className="w-3 h-3" />
+                  View Setup PR <ExternalLink className="w-3 h-3 inline" />
                 </a>
-              </div>
-            </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-            {/* Folder Mode Info */}
-            {bridge.folder_prefix && (
-              <div className="glass p-6 rounded-xl border border-border">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <FolderTree className="w-5 h-5 text-primary" />
-                  Folder Structure
-                </h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Import (AI Studio → Lovable)</p>
-                    <div className="bg-muted/50 p-3 rounded-lg font-mono text-xs">
-                      <div className="text-muted-foreground">your-lovable-repo/</div>
-                      <div className="ml-3 text-primary font-semibold">└── {bridge.folder_prefix}/  ← AI Studio code</div>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Export (Lovable → AI Studio)</p>
-                    <div className="bg-muted/50 p-3 rounded-lg font-mono text-xs">
-                      <div className="text-muted-foreground">ai-studio-repo/</div>
-                      <div className="ml-3 text-yellow-500 font-semibold">└── {destinationFolder}/  ← Lovable code</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+        {/* Repo Cards */}
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          {/* Canonical */}
+          <Card className="border-yellow-500/30">
+            <CardHeader className="pb-2">
+              <Badge variant="outline" className="w-fit bg-yellow-500/10 text-yellow-400 border-yellow-500/30 mb-2">
+                Canonical (Source of Truth)
+              </Badge>
+              <CardTitle className="text-lg">{bridge.canonical_repo.split("/")[1]}</CardTitle>
+              <CardDescription className="font-mono text-xs">
+                {bridge.canonical_repo}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <a
+                href={getGitHubUrl(bridge.canonical_repo)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                View on GitHub <ExternalLink className="w-3 h-3" />
+              </a>
+            </CardContent>
+          </Card>
 
-            {/* Export Settings */}
-            {canPull && (
-              <div className="glass p-6 rounded-xl border border-border">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-yellow-500" />
-                  Export Settings
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-muted-foreground mb-2 block">Folders to export from Lovable:</label>
-                    <div className="flex flex-wrap gap-2">
-                      {availableExportFolders.map((folder) => (
-                        <button
-                          key={folder.id}
-                          onClick={() => toggleExportFolder(folder.id)}
-                          className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                            selectedExportFolders.includes(folder.id)
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-muted/50 border-border hover:border-primary/50"
-                          }`}
-                        >
-                          {folder.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground mb-2 block">Destination folder in AI Studio repo:</label>
-                    <input
-                      type="text"
-                      value={destinationFolder}
-                      onChange={(e) => setDestinationFolder(e.target.value)}
-                      className="w-full max-w-xs px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                      placeholder="lovable"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Sync Actions */}
-            <div className="glass p-6 rounded-xl border border-border">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-primary" />
-                Sync Operations
-              </h3>
-              <div className="flex flex-wrap gap-3">
-                {canPull && (
-                  <Button 
-                    className="gap-2" 
-                    onClick={handlePreviewPull}
-                    disabled={isPulling || isPushing || isLoadingPreview}
-                  >
-                    {isLoadingPreview ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    {isLoadingPreview ? "Loading..." : "Import from AI Studio"}
-                  </Button>
-                )}
-                {canPush && (
-                  <Button 
-                    variant="outline"
-                    className="gap-2" 
-                    onClick={handlePreviewPush}
-                    disabled={isPulling || isPushing || isLoadingPreview}
-                  >
-                    {isLoadingPreview ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Upload className="w-4 h-4" />
-                    )}
-                    Export to AI Studio
-                  </Button>
-                )}
-                <Button variant="ghost" className="gap-2" onClick={() => navigate("/bridge")}>
-                  <RefreshCw className="w-4 h-4" />
-                  New Bridge
+          {/* Lovable */}
+          <Card className="border-purple-500/30">
+            <CardHeader className="pb-2">
+              <Badge variant="outline" className="w-fit bg-purple-500/10 text-purple-400 border-purple-500/30 mb-2">
+                💜 Lovable
+              </Badge>
+              <CardTitle className="text-lg">{bridge.lovable_repo.split("/")[1]}</CardTitle>
+              <CardDescription className="font-mono text-xs">
+                /{bridge.lovable_prefix}/
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <a
+                href={getGitHubUrl(bridge.lovable_repo)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                View on GitHub <ExternalLink className="w-3 h-3" />
+              </a>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTriggerSync("INBOUND", "lovable")}
+                  disabled={!!isRunningSync || !bridge.setup_complete}
+                >
+                  {isRunningSync === "INBOUND-lovable" ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <ArrowDownToLine className="w-3 h-3" />
+                  )}
+                  <span className="ml-1">Pull</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTriggerSync("OUTBOUND", "lovable")}
+                  disabled={!!isRunningSync || !bridge.setup_complete}
+                >
+                  {isRunningSync === "OUTBOUND-lovable" ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <ArrowUpFromLine className="w-3 h-3" />
+                  )}
+                  <span className="ml-1">Push</span>
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                <strong>Import:</strong> AI Studio → /{bridge?.folder_prefix || "src/ai-studio"}/ folder
-                <br />
-                <strong>Export:</strong> Selected folders → /{destinationFolder}/ in AI Studio repo
-              </p>
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Sync History */}
-            <div className="glass p-6 rounded-xl border border-border">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <History className="w-5 h-5 text-primary" />
-                Sync History
-              </h3>
-              {isLoadingHistory ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : syncHistory.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No sync operations yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {syncHistory.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between py-3 px-4 rounded-lg bg-muted/30 text-sm"
-                    >
-                      <div className="flex items-center gap-3">
-                        {entry.operation === "pull" ? (
-                          <Download className="w-4 h-4 text-green-500" />
-                        ) : (
-                          <Upload className="w-4 h-4 text-blue-500" />
-                        )}
-                        <span className="capitalize font-medium">{entry.operation}</span>
-                        <Badge variant={entry.status === "success" ? "default" : "destructive"} className="text-xs">
-                          {entry.status}
-                        </Badge>
-                        <span className="text-muted-foreground">
-                          {entry.files_count} files
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 text-muted-foreground">
-                        {entry.commit_sha && (
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {entry.commit_sha.slice(0, 7)}
-                          </code>
-                        )}
-                        <span className="text-xs">
-                          {new Date(entry.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Metadata */}
-            <div className="glass p-6 rounded-xl border border-border">
-              <h3 className="font-semibold mb-4">Details</h3>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground block mb-1">Sync Mode</span>
-                  <Badge variant="secondary">Folder Sync</Badge>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block mb-1">Status</span>
-                  <Badge variant="outline" className="capitalize">{bridge.status}</Badge>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block mb-1">Created</span>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(bridge.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block mb-1">Last Updated</span>
-                  <span>{new Date(bridge.updated_at).toLocaleDateString()}</span>
-                </div>
+          {/* AI Studio */}
+          <Card className="border-blue-500/30">
+            <CardHeader className="pb-2">
+              <Badge variant="outline" className="w-fit bg-blue-500/10 text-blue-400 border-blue-500/30 mb-2">
+                🌐 AI Studio
+              </Badge>
+              <CardTitle className="text-lg">{bridge.aistudio_repo.split("/")[1]}</CardTitle>
+              <CardDescription className="font-mono text-xs">
+                /{bridge.aistudio_prefix}/
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <a
+                href={getGitHubUrl(bridge.aistudio_repo)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                View on GitHub <ExternalLink className="w-3 h-3" />
+              </a>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTriggerSync("INBOUND", "aistudio")}
+                  disabled={!!isRunningSync || !bridge.setup_complete}
+                >
+                  {isRunningSync === "INBOUND-aistudio" ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <ArrowDownToLine className="w-3 h-3" />
+                  )}
+                  <span className="ml-1">Pull</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTriggerSync("OUTBOUND", "aistudio")}
+                  disabled={!!isRunningSync || !bridge.setup_complete}
+                >
+                  {isRunningSync === "OUTBOUND-aistudio" ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <ArrowUpFromLine className="w-3 h-3" />
+                  )}
+                  <span className="ml-1">Push</span>
+                </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sync History */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Sync History</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  const runs = await getSyncRuns(bridge.id);
+                  setSyncRuns(runs);
+                }}
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
             </div>
-          </div>
-        ) : null}
+          </CardHeader>
+          <CardContent>
+            {isLoadingRuns ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : syncRuns.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                No sync runs yet. Trigger a sync to get started.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Direction</TableHead>
+                    <TableHead>Source → Dest</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>PR</TableHead>
+                    <TableHead>Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {syncRuns.map((run) => (
+                    <TableRow key={run.id}>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {run.direction.toLowerCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {run.source_repo.split("/")[1]} → {run.dest_repo.split("/")[1]}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(run.status)}
+                          {getStatusBadge(run.status)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {run.pr_url ? (
+                          <a
+                            href={run.pr_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            #{run.pr_number} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {new Date(run.created_at).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </main>
-
-      {/* Pull Preview Dialog */}
-      <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Download className="w-5 h-5" />
-              Pull Files from Source
-            </DialogTitle>
-            <DialogDescription>
-              {previewFiles.length} files will be synced from <strong>{selectedSourceBranch}</strong> branch
-              {bridge?.folder_prefix && ` into /${bridge.folder_prefix}/`}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="max-h-[400px] rounded-lg border border-border">
-            <div className="p-4 space-y-1">
-              {previewFiles.map((file, index) => (
-                <div 
-                  key={index} 
-                  className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 text-sm"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate font-mono text-xs">{file.targetPath}</span>
-                  </div>
-                  {file.size && (
-                    <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                      {formatFileSize(file.size)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPreview(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmPull} disabled={isPulling} className="gap-2">
-              {isPulling ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              {isPulling ? "Pulling..." : `Pull ${previewFiles.length} Files`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Push Preview Dialog */}
-      <Dialog open={showPushPreview} onOpenChange={setShowPushPreview}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5" />
-              Push Files to Source
-            </DialogTitle>
-            <DialogDescription>
-              {pushPreviewFiles.length} files from <strong>/{bridge?.folder_prefix}/</strong> will be pushed to the source repo's <strong>{selectedSourceBranch}</strong> branch
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="max-h-[400px] rounded-lg border border-border">
-            <div className="p-4 space-y-1">
-              {pushPreviewFiles.map((file, index) => (
-                <div 
-                  key={index} 
-                  className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 text-sm"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate font-mono text-xs">{file.targetPath}</span>
-                  </div>
-                  {file.size && (
-                    <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                      {formatFileSize(file.size)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPushPreview(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmPush} disabled={isPushing} className="gap-2">
-              {isPushing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              {isPushing ? "Pushing..." : `Push ${pushPreviewFiles.length} Files`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
